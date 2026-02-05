@@ -4,7 +4,8 @@ import DataTable from './components/DataTable';
 import DownloadButton from './components/DownloadButton';
 import { parseRawData } from './services/dataProcessor';
 import { translateBatch } from './services/translator';
-import { classifyItems } from './services/classifier';
+import { classifyItems, extractAttributes } from './services/classifier';
+import { getExchangeRate } from './services/currency';
 import type { OrderItem } from './types';
 import {
   Languages,
@@ -27,11 +28,21 @@ function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('tl_google_key') || import.meta.env.VITE_GOOGLE_API_KEY || '');
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('tl_gemini_key') || import.meta.env.VITE_GEMINI_API_KEY || '');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingType, setProcessingType] = useState<'translate' | 'classify' | null>(null);
+  const [processingType, setProcessingType] = useState<'translate' | 'classify' | 'extract' | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState('console');
+  const [exchangeRate, setExchangeRate] = useState<number>(0.14); // Default fallback
+
+  // Fetch exchange rate on mount
+  useEffect(() => {
+    const fetchRate = async () => {
+      const rate = await getExchangeRate();
+      setExchangeRate(rate);
+    };
+    fetchRate();
+  }, []);
 
   // Close sidebar when clicking overlay
   const closeSidebar = () => setSidebarOpen(false);
@@ -118,8 +129,48 @@ function App() {
     }
   };
 
+  const handleSmartProcess = async () => {
+    if (!apiKey.trim() || !geminiKey.trim()) {
+      setError("Please enter both Google Translate and Gemini API keys.");
+      return;
+    }
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      // Step 1: Translate
+      setProcessingType('translate');
+      setProgress(0);
+      const translatedData = await translateBatch(data, apiKey, (p) => setProgress(p));
+      setData(translatedData);
+
+      // Step 2: Classify (category, subcategory, shortened name)
+      setProcessingType('classify');
+      setProgress(0);
+      const classifiedData = await classifyItems(translatedData, geminiKey, (p) => setProgress(p));
+      setData(classifiedData);
+
+      // Step 3: Extract Attributes (size, color, material, gender, etc.)
+      setProcessingType('extract');
+      setProgress(0);
+      const fullyProcessedData = await extractAttributes(classifiedData, geminiKey, (p) => setProgress(p));
+      setData(fullyProcessedData);
+
+    } catch (err) {
+      setError("Smart processing failed. Please check your API keys and connection.");
+      console.error(err);
+    } finally {
+      setIsProcessing(false);
+      setProcessingType(null);
+      setProgress(0);
+    }
+  };
+
   const isTranslating = isProcessing && processingType === 'translate';
   const isClassifying = isProcessing && processingType === 'classify';
+  const isExtracting = isProcessing && processingType === 'extract';
+  const isSmartProcessing = isProcessing && processingType === null;
+
 
   const navItems = [
     { id: 'console', icon: Layers, label: 'Console' },
@@ -167,6 +218,10 @@ function App() {
 
           <div className="nav-section">
             <div className="nav-section-label">Quick Actions</div>
+            <div className="nav-item" onClick={() => { handleSmartProcess(); closeSidebar(); }}>
+              <Sparkles size={18} />
+              <span>Smart Process</span>
+            </div>
             <div className="nav-item" onClick={() => { handleTranslate(); closeSidebar(); }}>
               <Languages size={18} />
               <span>Translate</span>
@@ -294,7 +349,7 @@ function App() {
           <div className="progress-container animate-fade">
             <div className="progress-header">
               <span className="progress-label">
-                {isTranslating ? 'Translating...' : 'Classifying...'}
+                {isSmartProcessing ? 'Smart Processing...' : (isTranslating ? 'Translating...' : (isClassifying ? 'Classifying...' : (isExtracting ? 'Extracting Attributes...' : 'Processing...')))}
               </span>
               <span className="progress-value">{progress}%</span>
             </div>
@@ -324,13 +379,22 @@ function App() {
                 </div>
               </div>
               <div className="metric-card">
-                <div className="metric-label">Value</div>
-                <div className="metric-value">
-                  ¥{data.reduce((sum, item) => {
-                    const qty = parseFloat(item.quantity.replace(/[^0-9.]/g, '') || '0');
-                    const price = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
-                    return sum + (qty * price);
-                  }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div className="metric-label">Total Value</div>
+                <div className="metric-value" style={{ fontSize: '1.2rem' }}>
+                  <div style={{ color: 'var(--text-primary)' }}>
+                    ¥{data.reduce((sum, item) => {
+                      const qty = parseFloat(item.quantity.replace(/[^0-9.]/g, '') || '0');
+                      const price = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
+                      return sum + (qty * price);
+                    }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                  <div style={{ color: 'var(--accent)', fontSize: '0.9rem', marginTop: 4 }}>
+                    ${(data.reduce((sum, item) => {
+                      const qty = parseFloat(item.quantity.replace(/[^0-9.]/g, '') || '0');
+                      const price = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
+                      return sum + (qty * price);
+                    }, 0) * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
+                  </div>
                 </div>
               </div>
             </div>
@@ -340,6 +404,27 @@ function App() {
               <div className="toolbar-left">
                 <button
                   className="btn-primary"
+                  onClick={handleSmartProcess}
+                  disabled={isProcessing}
+                  style={{
+                    background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%)',
+                    boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.3)'
+                  }}
+                >
+                  {isProcessing && !processingType ? (
+                    <>
+                      <span className="spinner" />
+                      <span className="hide-mobile">Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      <span>Smart Process</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  className="btn-secondary"
                   onClick={handleTranslate}
                   disabled={isProcessing}
                 >
@@ -372,7 +457,7 @@ function App() {
                     </>
                   )}
                 </button>
-                <DownloadButton data={data} />
+                <DownloadButton data={data} exchangeRate={exchangeRate} />
               </div>
               <div className="toolbar-right">
                 <button
@@ -386,7 +471,7 @@ function App() {
             </div>
 
             {/* Data Table */}
-            <DataTable data={data} />
+            <DataTable data={data} exchangeRate={exchangeRate} />
           </div>
         )}
       </main>

@@ -61,9 +61,17 @@ export const parseRawData = (rawData: string): ParseResult => {
             actualPayment: colActualPayment,
             freight: colFreight,
             // Use current row's logistics info (do NOT fill down)
-            logisticsCompany: colLogisticsCompany,
-            logisticsNumber: colLogisticsNumber,
+            logisticsCompany: colLogisticsCompany.includes('物流单号') ? '' : colLogisticsCompany,
+            logisticsNumber: colLogisticsNumber.includes('物流单号') ? '' : colLogisticsNumber,
         };
+
+        // Check if item has 0 QTY and 0 Amount - skip if so
+        const cleanQty = parseFloat(colQty.replace(/[^0-9.]/g, '') || '0');
+        const cleanAmount = parseFloat(colAmount.replace(/[^0-9.]/g, '') || '0');
+
+        if (cleanQty === 0 && cleanAmount === 0) {
+            continue;
+        }
 
         data.push(item);
     }

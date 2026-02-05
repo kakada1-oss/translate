@@ -18,8 +18,18 @@ export interface OrderItem {
     productNameTranslated?: string;
     modelTranslated?: string;
     logisticsCompanyTranslated?: string;
+    statusTranslated?: string;
+    productNameShortened?: string;
     category?: string;
     subcategory?: string;
+    // Extracted attributes (Pass 2)
+    attrSize?: string;
+    attrColor?: string;
+    attrMaterial?: string;
+    attrGender?: string;
+    attrAgeGroup?: string;
+    attrBrand?: string;
+    attrOther?: string;
 }
 
 export type ParseResult = {

@@ -46,10 +46,10 @@ export const translateBatch = async (
     // In a real app, we would cache these.
     const uniqueStrings = new Set<string>();
     items.forEach(item => {
-        if (item.shopName) uniqueStrings.add(item.shopName);
         if (item.productName) uniqueStrings.add(item.productName);
         if (item.model) uniqueStrings.add(item.model);
         if (item.logisticsCompany) uniqueStrings.add(item.logisticsCompany);
+        if (item.status) uniqueStrings.add(item.status);
     });
 
     const stringMap: Record<string, string> = {};
@@ -97,9 +97,10 @@ export const translateBatch = async (
     // Map back to items
     return newItems.map(item => ({
         ...item,
-        shopNameTranslated: stringMap[item.shopName] || item.shopName,
+        shopNameTranslated: item.shopName,
         productNameTranslated: stringMap[item.productName] || item.productName,
         modelTranslated: stringMap[item.model] || item.model,
         logisticsCompanyTranslated: stringMap[item.logisticsCompany] || item.logisticsCompany,
+        statusTranslated: stringMap[item.status] || item.status,
     }));
 };
