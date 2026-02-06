@@ -30,6 +30,7 @@ export interface OrderItem {
     attrAgeGroup?: string;
     attrBrand?: string;
     attrOther?: string;
+    estArrivalDate?: string;
 }
 
 export type ParseResult = {

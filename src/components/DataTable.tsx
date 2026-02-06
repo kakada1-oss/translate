@@ -109,6 +109,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                     <thead>
                         <tr>
                             <th style={{ width: '140px' }}>Order</th>
+                            <th style={{ width: '120px' }}>Est. Arrival</th>
                             <th style={{ width: '150px' }}>Merchant</th>
                             <th style={{ width: '120px' }}>Category</th>
                             <th style={{ minWidth: '200px' }}>Product</th>
@@ -184,6 +185,27 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                 }}>
                                                     {item.statusTranslated || item.status}
                                                 </div>
+                                            </div>
+                                        </td>
+                                    )}
+
+                                    {isFirstOfOrder && (
+                                        <td rowSpan={span} style={{
+                                            verticalAlign: 'top',
+                                            borderRight: '2px solid var(--border-subtle)',
+                                            background: 'rgba(var(--accent-rgb), 0.01)',
+                                            textAlign: 'center'
+                                        }}>
+                                            <div style={{
+                                                fontSize: '0.8rem',
+                                                fontWeight: 500,
+                                                color: 'var(--text-primary)',
+                                                marginTop: 4
+                                            }}>
+                                                {item.estArrivalDate}
+                                            </div>
+                                            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                                                (15d projection)
                                             </div>
                                         </td>
                                     )}

@@ -37,7 +37,8 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) =
                 'total_cny': totalCNY,
                 'price_usd': (amountCNY * exchangeRate).toFixed(2),
                 'total_usd': (totalCNY * exchangeRate).toFixed(2),
-                'image_url': item.productLink
+                'est_arrival_date': item.estArrivalDate || '-',
+                'source link': item.productLink
             };
         });
 
@@ -66,7 +67,8 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) =
             { wch: 12 }, // total_cny
             { wch: 12 }, // price_usd
             { wch: 12 }, // total_usd
-            { wch: 40 }, // image_url
+            { wch: 15 }, // est_arrival_date
+            { wch: 40 }, // source link
         ];
         worksheet['!cols'] = wscols;
 

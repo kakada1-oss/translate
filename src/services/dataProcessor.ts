@@ -46,6 +46,20 @@ export const parseRawData = (rawData: string): ParseResult => {
             lastShopName = colShopName;
         }
 
+        // Calculate estimated arrival (order date + 15 days)
+        let estArrival = '-';
+        if (lastOrderTime) {
+            try {
+                const date = new Date(lastOrderTime);
+                if (!isNaN(date.getTime())) {
+                    date.setDate(date.getDate() + 15);
+                    estArrival = date.toISOString().split('T')[0];
+                }
+            } catch (e) {
+                console.error('Date parsing failed', lastOrderTime);
+            }
+        }
+
         // Create item - use last known values for order-level fields
         const item: OrderItem = {
             id: `${lastOrderNumber}-${i}`,
@@ -63,6 +77,7 @@ export const parseRawData = (rawData: string): ParseResult => {
             // Use current row's logistics info (do NOT fill down)
             logisticsCompany: colLogisticsCompany.includes('物流单号') ? '' : colLogisticsCompany,
             logisticsNumber: colLogisticsNumber.includes('物流单号') ? '' : colLogisticsNumber,
+            estArrivalDate: estArrival
         };
 
         // Check if item has 0 QTY and 0 Amount - skip if so
