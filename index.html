@@ -1,13 +1,31 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>shadow-copernicus</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thread Line · Intelligence Suite</title>
+  <meta name="description"
+    content="Process, translate, and classify e-commerce order data with AI. Thread Line Intelligence Suite." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Anti-FOUC: apply dark mode + theme immediately before paint -->
+  <script>
+    (function () {
+      try {
+        var dark = localStorage.getItem('tl_dark') === 'true';
+        var theme = localStorage.getItem('tl_theme') || 'default';
+        if (dark) document.documentElement.setAttribute('data-dark', 'true');
+        if (theme) document.documentElement.setAttribute('data-theme', theme);
+      } catch (_) { }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

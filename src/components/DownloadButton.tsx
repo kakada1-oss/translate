@@ -10,7 +10,6 @@ interface DownloadButtonProps {
 
 const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) => {
     const handleDownload = () => {
-        // Prepare data for export - cleaner structure directly for Excel
         const exportData = data.map(item => {
             const qty = parseFloat(item.quantity.replace(/[^0-9.]/g, '') || '0');
             const amountCNY = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
@@ -19,7 +18,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) =
             return {
                 'order_id': item.orderNumber,
                 'order_date': item.orderTime,
-                'status': 'Ordered',
+                'status': 'ordered',
                 'merchant': item.shopName,
                 'category': item.category || '-',
                 'subcategory': item.subcategory || '-',
@@ -38,54 +37,34 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) =
                 'price_usd': (amountCNY * exchangeRate).toFixed(2),
                 'total_usd': (totalCNY * exchangeRate).toFixed(2),
                 'est_arrival_date': item.estArrivalDate || '-',
-                'source link': item.productLink
+                'source_link': item.productLink,
             };
         });
 
-        // Create workbook and worksheet
         const worksheet = XLSX.utils.json_to_sheet(exportData);
 
-        // Auto-width for columns (heuristic)
-        const wscols = [
-            { wch: 20 }, // order_id
-            { wch: 18 }, // order_date
-            { wch: 15 }, // status
-            { wch: 20 }, // merchant
-            { wch: 15 }, // category
-            { wch: 15 }, // subcategory
-            { wch: 35 }, // product
-            { wch: 25 }, // style_model
-            { wch: 10 }, // size
-            { wch: 15 }, // color
-            { wch: 15 }, // material
-            { wch: 10 }, // gender
-            { wch: 12 }, // age_group
-            { wch: 15 }, // brand
-            { wch: 20 }, // notes
-            { wch: 8 },  // qty
-            { wch: 12 }, // price_cny
-            { wch: 12 }, // total_cny
-            { wch: 12 }, // price_usd
-            { wch: 12 }, // total_usd
-            { wch: 15 }, // est_arrival_date
-            { wch: 40 }, // source link
+        worksheet['!cols'] = [
+            { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 20 },
+            { wch: 15 }, { wch: 15 }, { wch: 35 }, { wch: 25 },
+            { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 10 },
+            { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 8 },
+            { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+            { wch: 15 }, { wch: 40 },
         ];
-        worksheet['!cols'] = wscols;
 
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
-
-        // Write file
-        XLSX.writeFile(workbook, "translated_orders.xlsx");
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Orders');
+        XLSX.writeFile(workbook, 'translated_orders.xlsx');
     };
 
     return (
         <button
+            id="btn-export"
             onClick={handleDownload}
             disabled={data.length === 0}
             className="btn-success"
         >
-            <Download size={16} />
+            <Download size={15} />
             Export
         </button>
     );

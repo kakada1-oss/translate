@@ -1,16 +1,1 @@
-/* App.css - Minimal overrides */
-/* All main styles are in index.css */
-
-/* Hide scrollbar during smooth scroll */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Fix for webkit autofill backgrounds */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--text-primary);
-  -webkit-box-shadow: 0 0 0px 1000px var(--bg-tertiary) inset;
-  transition: background-color 5000s ease-in-out 0s;
-}
+/* App-specific overrides — intentionally minimal; globals live in index.css */

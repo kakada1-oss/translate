@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DataInput from './components/DataInput';
 import DataTable from './components/DataTable';
 import DownloadButton from './components/DownloadButton';
+import Toast from './components/Toast';
+import type { ToastMessage, ToastType } from './components/Toast';
 import { parseRawData } from './services/dataProcessor';
 import { translateBatch } from './services/translator';
 import { classifyItems, extractAttributes } from './services/classifier';
@@ -10,317 +12,448 @@ import type { OrderItem } from './types';
 import {
   Languages,
   Key,
-  Sparkles,
   Brain,
   FileText,
-  Settings,
-  BarChart3,
-  Layers,
   Zap,
   Menu,
   X,
   ChevronRight,
-  AlertCircle
+  Eye,
+  EyeOff,
+  Moon,
+  Sun,
+  Palette,
+  Sparkles,
+  ChevronDown,
+  CheckCircle2,
 } from 'lucide-react';
 
+/* ═══════════════════════════════════════════════════════
+   Types & constants
+═══════════════════════════════════════════════════════ */
+type Theme = 'default' | 'festive' | 'ocean' | 'petal';
+
+const THEMES: { id: Theme; label: string; color: string }[] = [
+  { id: 'default', label: 'Greige', color: '#A3A199' },
+  { id: 'festive', label: 'Festive', color: '#D43F3F' },
+  { id: 'ocean', label: 'Ocean', color: '#3F9AD4' },
+  { id: 'petal', label: 'Petal', color: '#D43F9A' },
+];
+
+const NAV_ITEMS = [{ id: 'console', label: 'Console' }];
+
+let toastCounter = 0;
+
+/* ═══════════════════════════════════════════════════════
+   App
+═══════════════════════════════════════════════════════ */
 function App() {
+  /* ── Data state ────────────────────────────────── */
   const [data, setData] = useState<OrderItem[]>([]);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('tl_google_key') || import.meta.env.VITE_GOOGLE_API_KEY || '');
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('tl_gemini_key') || import.meta.env.VITE_GEMINI_API_KEY || '');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingType, setProcessingType] = useState<'translate' | 'classify' | 'extract' | null>(null);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState('console');
-  const [exchangeRate, setExchangeRate] = useState<number>(0.14); // Default fallback
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number>(0.14);
 
-  // Fetch exchange rate on mount
+  /* ── UI state ──────────────────────────────────── */
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('tl_dark') === 'true');
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('tl_theme') as Theme) || 'default');
+  // Collapse API key card when keys already saved
+  const [keysExpanded, setKeysExpanded] = useState(() => !localStorage.getItem('tl_google_key') && !localStorage.getItem('tl_gemini_key'));
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  /* ── Sync → DOM / storage ──────────────────────── */
   useEffect(() => {
-    const fetchRate = async () => {
-      const rate = await getExchangeRate();
-      setExchangeRate(rate);
-    };
-    fetchRate();
+    document.documentElement.setAttribute('data-dark', isDark ? 'true' : 'false');
+    localStorage.setItem('tl_dark', isDark ? 'true' : 'false');
+  }, [isDark]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('tl_theme', theme);
+  }, [theme]);
+
+  useEffect(() => { getExchangeRate().then(setExchangeRate); }, []);
+  useEffect(() => { localStorage.setItem('tl_google_key', apiKey); }, [apiKey]);
+  useEffect(() => { localStorage.setItem('tl_gemini_key', geminiKey); }, [geminiKey]);
+
+  // Close drawer on resize
+  useEffect(() => {
+    const onResize = () => { if (window.innerWidth > 768) setDrawerOpen(false); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Close sidebar when clicking overlay
-  const closeSidebar = () => setSidebarOpen(false);
-
-  // Persistence
+  // Keyboard shortcuts
   useEffect(() => {
-    localStorage.setItem('tl_google_key', apiKey);
-  }, [apiKey]);
-
-  useEffect(() => {
-    localStorage.setItem('tl_gemini_key', geminiKey);
-  }, [geminiKey]);
-
-  // Close sidebar on route change or window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 768) {
-        setSidebarOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        e.preventDefault();
+        document.getElementById('table-search')?.focus();
       }
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /* ── Toast helper ──────────────────────────────── */
+  const addToast = useCallback((type: ToastType, title: string, description?: string, duration?: number) => {
+    const id = `toast-${++toastCounter}`;
+    setToasts(prev => [...prev, { id, type, title, description, duration }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  /* ── Handlers ──────────────────────────────────── */
   const handleProcess = (rawData: string) => {
-    setError(null);
     try {
-      const { data: parsedData, errors } = parseRawData(rawData);
-      if (errors.length > 0) {
-        console.warn('Parse errors:', errors);
-      }
-      if (parsedData.length === 0) {
-        setError("No valid data found in input. Please check your data format.");
+      const { data: parsed, errors } = parseRawData(rawData);
+      if (errors.length) console.warn('Parse warnings:', errors);
+      if (!parsed.length) {
+        addToast('error', 'No data found', 'Check that your data is in CSV or TSV format.');
         return;
       }
-      setData(parsedData);
+      setData(parsed);
+      addToast('success', `${parsed.length} items loaded`, `${new Set(parsed.map(i => i.orderNumber)).size} orders ready to process.`);
     } catch (err) {
-      setError("Failed to parse data. Ensure it's properly formatted.");
+      addToast('error', 'Parse failed', "Ensure data is properly formatted (CSV/TSV).");
       console.error(err);
     }
   };
 
   const handleTranslate = async () => {
-    if (!apiKey.trim()) {
-      setError("Please enter your Google Translate API key.");
-      return;
-    }
-    setIsProcessing(true);
-    setProcessingType('translate');
-    setProgress(0);
-    setError(null);
+    if (!apiKey.trim()) { addToast('error', 'API key missing', 'Enter your Google Translate API key.'); return; }
+    if (!data.length) { addToast('info', 'No data', 'Load order data first.'); return; }
+    setIsProcessing(true); setProcessingType('translate'); setProgress(0);
     try {
-      const translatedData = await translateBatch(data, apiKey, (p) => setProgress(p));
-      setData(translatedData);
-    } catch (err) {
-      setError("Translation failed. Please check your API key.");
-      console.error(err);
-    } finally {
-      setIsProcessing(false);
-      setProcessingType(null);
-      setProgress(0);
-    }
+      const result = await translateBatch(data, apiKey, p => setProgress(p));
+      setData(result);
+      addToast('success', 'Translation complete', `${result.length} items translated.`);
+    } catch {
+      addToast('error', 'Translation failed', 'Check your Google Translate API key.');
+    } finally { setIsProcessing(false); setProcessingType(null); setProgress(0); }
   };
 
   const handleClassify = async () => {
-    if (!geminiKey.trim()) {
-      setError("Please enter your Gemini API key.");
-      return;
-    }
-    setIsProcessing(true);
-    setProcessingType('classify');
-    setProgress(0);
-    setError(null);
+    if (!geminiKey.trim()) { addToast('error', 'API key missing', 'Enter your Gemini API key.'); return; }
+    if (!data.length) { addToast('info', 'No data', 'Load order data first.'); return; }
+    setIsProcessing(true); setProcessingType('classify'); setProgress(0);
     try {
-      const classifiedData = await classifyItems(data, geminiKey, (p) => setProgress(p));
-      setData(classifiedData);
-    } catch (err) {
-      setError("Classification failed. Please check your API key.");
-      console.error(err);
-    } finally {
-      setIsProcessing(false);
-      setProcessingType(null);
-      setProgress(0);
-    }
+      const result = await classifyItems(data, geminiKey, p => setProgress(p));
+      setData(result);
+      addToast('success', 'Classification complete', `${result.length} items classified.`);
+    } catch {
+      addToast('error', 'Classification failed', 'Check your Gemini API key.');
+    } finally { setIsProcessing(false); setProcessingType(null); setProgress(0); }
   };
 
   const handleSmartProcess = async () => {
     if (!apiKey.trim() || !geminiKey.trim()) {
-      setError("Please enter both Google Translate and Gemini API keys.");
+      addToast('error', 'API keys missing', 'Enter both Google Translate and Gemini API keys.');
       return;
     }
+    if (!data.length) { addToast('info', 'No data', 'Load order data first.'); return; }
     setIsProcessing(true);
-    setError(null);
-
     try {
-      // Step 1: Translate
-      setProcessingType('translate');
-      setProgress(0);
-      const translatedData = await translateBatch(data, apiKey, (p) => setProgress(p));
-      setData(translatedData);
+      setProcessingType('translate'); setProgress(0);
+      const t = await translateBatch(data, apiKey, p => setProgress(p));
+      setData(t);
 
-      // Step 2: Classify (category, subcategory, shortened name)
-      setProcessingType('classify');
-      setProgress(0);
-      const classifiedData = await classifyItems(translatedData, geminiKey, (p) => setProgress(p));
-      setData(classifiedData);
+      setProcessingType('classify'); setProgress(0);
+      const c = await classifyItems(t, geminiKey, p => setProgress(p));
+      setData(c);
 
-      // Step 3: Extract Attributes (size, color, material, gender, etc.)
-      setProcessingType('extract');
-      setProgress(0);
-      const fullyProcessedData = await extractAttributes(classifiedData, geminiKey, (p) => setProgress(p));
-      setData(fullyProcessedData);
+      setProcessingType('extract'); setProgress(0);
+      const f = await extractAttributes(c, geminiKey, p => setProgress(p));
+      setData(f);
 
-    } catch (err) {
-      setError("Smart processing failed. Please check your API keys and connection.");
-      console.error(err);
-    } finally {
-      setIsProcessing(false);
-      setProcessingType(null);
-      setProgress(0);
-    }
+      addToast('success', 'Smart processing done!', `${f.length} items translated, classified & enriched.`, 6000);
+    } catch {
+      addToast('error', 'Processing failed', 'Check your API keys and connection.');
+    } finally { setIsProcessing(false); setProcessingType(null); setProgress(0); }
   };
 
   const isTranslating = isProcessing && processingType === 'translate';
   const isClassifying = isProcessing && processingType === 'classify';
-  const isExtracting = isProcessing && processingType === 'extract';
-  const isSmartProcessing = isProcessing && processingType === null;
+  const keysConfigured = !!(apiKey && geminiKey);
 
+  /* ── Progress step labels ──────────────────────── */
+  const STEPS = [
+    { key: 'translate', label: 'Translating' },
+    { key: 'classify', label: 'Classifying' },
+    { key: 'extract', label: 'Extracting' },
+  ] as const;
+  const curStepIdx = STEPS.findIndex(s => s.key === processingType);
 
-  const navItems = [
-    { id: 'console', icon: Layers, label: 'Console' },
-    { id: 'analytics', icon: BarChart3, label: 'Analytics' },
-    { id: 'settings', icon: Settings, label: 'Settings' },
-  ];
-
+  /* ══════════════════════════════════════════════════
+     Render
+  ══════════════════════════════════════════════════ */
   return (
     <div className="app-layout">
-      {/* Sidebar Overlay (mobile) */}
-      <div
-        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
-        onClick={closeSidebar}
-      />
 
-      {/* Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand">
-          <div className="brand-icon">
-            <Sparkles size={18} />
-          </div>
-          <div className="brand-text">
-            <span className="brand-name">Thread Line</span>
-            <span className="brand-tagline">Intelligence Suite</span>
-          </div>
+      {/* ══════════════════════  TOP HEADER  ══════════════════════ */}
+      <header className="app-header">
+
+        <button
+          id="btn-menu-toggle"
+          className="header-menu-btn"
+          onClick={() => setDrawerOpen(d => !d)}
+          aria-label="Open menu"
+          style={{ marginRight: '0.5rem' }}
+        >
+          <Menu size={18} />
+        </button>
+
+        <div className="header-brand">
+          <span className="brand-name">thread</span>
+          <span className="brand-tagline">line</span>
         </div>
 
-        <nav className="sidebar-nav">
-          <div className="nav-section">
-            <div className="nav-section-label">Navigation</div>
-            {navItems.map((item) => (
+        <div className="header-divider" />
+
+        <nav className="header-nav">
+          {NAV_ITEMS.map(item => (
+            <div
+              key={item.id}
+              id={`nav-${item.id}`}
+              className={`nav-item ${activeNav === item.id ? 'active' : ''}`}
+              onClick={() => setActiveNav(item.id)}
+              role="button"
+              tabIndex={0}
+            >
+              {item.label}
+            </div>
+          ))}
+        </nav>
+
+        <div className="header-controls">
+          <button
+            id="btn-theme-cycle"
+            title={`Theme: ${THEMES.find(t => t.id === theme)?.label}`}
+            onClick={() => {
+              const idx = THEMES.findIndex(t => t.id === theme);
+              const next = THEMES[(idx + 1) % THEMES.length];
+              setTheme(next.id);
+              addToast('info', `Theme: ${next.label}`, undefined, 1800);
+            }}
+            aria-label="Cycle theme"
+          >
+            <Palette size={15} />
+          </button>
+
+          <button
+            id="btn-dark-toggle"
+            onClick={() => setIsDark(d => !d)}
+            aria-label="Toggle dark mode"
+          >
+            {isDark ? <Moon size={15} /> : <Sun size={15} />}
+          </button>
+        </div>
+      </header>
+
+      {/* ══════════════════  STICKY PROGRESS BAR  ══════════════════
+           Thin 2px bar below the header; only rendered while processing */}
+      {isProcessing && (
+        <div style={{
+          position: 'sticky',
+          top: 52,
+          zIndex: 150,
+          height: 3,
+          background: 'var(--surface-color)',
+          borderBottom: '1px solid var(--border-color)',
+        }}>
+          <div style={{
+            height: '100%',
+            width: `${progress}%`,
+            background: 'var(--accent-color)',
+            transition: 'width 0.3s ease',
+            borderRadius: '0 2px 2px 0',
+          }} />
+        </div>
+      )}
+
+      {/* ══════════════════  MOBILE DRAWER  ══════════════════ */}
+      <div className={`mobile-drawer ${drawerOpen ? 'open' : ''}`}>
+        <div className="drawer-overlay" onClick={() => setDrawerOpen(false)} />
+        <div className="drawer-panel">
+          <div className="drawer-header">
+            <div className="header-brand" style={{ gap: '0.375rem' }}>
+              <span className="brand-name" style={{ fontSize: '1rem' }}>thread</span>
+              <span className="brand-tagline" style={{ color: 'rgba(255,255,255,0.4)', letterSpacing: '0.2em' }}>line</span>
+            </div>
+            <button className="btn-ghost btn-sm" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+              <X size={18} />
+            </button>
+          </div>
+
+          <nav className="drawer-nav">
+            {NAV_ITEMS.map(item => (
               <div
                 key={item.id}
+                id={`drawer-nav-${item.id}`}
                 className={`nav-item ${activeNav === item.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveNav(item.id);
-                  closeSidebar();
-                }}
+                onClick={() => { setActiveNav(item.id); setDrawerOpen(false); }}
+                role="button"
+                tabIndex={0}
               >
-                <item.icon size={18} />
-                <span>{item.label}</span>
+                {item.label}
               </div>
             ))}
-          </div>
 
-          <div className="nav-section">
-            <div className="nav-section-label">Quick Actions</div>
-            <div className="nav-item" onClick={() => { handleSmartProcess(); closeSidebar(); }}>
-              <Sparkles size={18} />
-              <span>Smart Process</span>
-            </div>
-            <div className="nav-item" onClick={() => { handleTranslate(); closeSidebar(); }}>
-              <Languages size={18} />
-              <span>Translate</span>
-            </div>
-            <div className="nav-item" onClick={() => { handleClassify(); closeSidebar(); }}>
-              <Brain size={18} />
-              <span>Classify</span>
-            </div>
-          </div>
-        </nav>
-      </aside>
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0.75rem 0' }} />
 
-      {/* Main Content */}
-      <main className="main-content">
-        {/* Mobile Header */}
-        <div className="mobile-header">
-          <button className="btn-ghost" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-          <div className="flex items-center gap-2">
-            <Sparkles size={18} style={{ color: 'var(--accent)' }} />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Thread Line</span>
+            <div id="drawer-smart-process" className="nav-item" onClick={() => { handleSmartProcess(); setDrawerOpen(false); }}>
+              <Sparkles size={14} />Smart Process
+            </div>
+            <div id="drawer-translate" className="nav-item" onClick={() => { handleTranslate(); setDrawerOpen(false); }}>
+              <Languages size={14} />Translate
+            </div>
+            <div id="drawer-classify" className="nav-item" onClick={() => { handleClassify(); setDrawerOpen(false); }}>
+              <Brain size={14} />Classify
+            </div>
+          </nav>
+
+          <div className="drawer-footer">
+            <div className="drawer-footer-label">Appearance</div>
+            <button className="dark-toggle" onClick={() => setIsDark(d => !d)} aria-label="Toggle dark mode">
+              {isDark ? <Moon size={14} /> : <Sun size={14} />}
+              <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{isDark ? 'Dark mode' : 'Light mode'}</span>
+              <div className="toggle-track" style={{ marginLeft: 'auto' }}>
+                <div className="toggle-thumb" />
+              </div>
+            </button>
+            <div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '0.375rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Palette size={10} />Theme
+              </div>
+              <div className="theme-dots">
+                {THEMES.map(t => (
+                  <button key={t.id} className={`theme-dot ${theme === t.id ? 'active' : ''}`} title={t.label} onClick={() => setTheme(t.id)} aria-label={`${t.label} theme`} style={{ background: t.color }} />
+                ))}
+              </div>
+            </div>
           </div>
-          <div style={{ width: 36 }} />
         </div>
+      </div>
 
-        {/* Page Header */}
-        <header className="page-header animate-slide-up">
+      {/* ════════════════  MAIN CONTENT  ════════════════ */}
+      <main className="main-content">
+
+        {/* ── Page header ─────────────────────────────── */}
+        <header className="page-header animate-reveal">
           <div className="page-title">
             <h1>Translator Console</h1>
-            <div className="status-badge">
-              <span>Online</span>
+            <div className={`status-badge ${isProcessing ? 'processing' : ''}`}>
+              {isProcessing ? (
+                <><span className="spinner" style={{ width: 8, height: 8, borderWidth: 1.5 }} />{STEPS[curStepIdx]?.label ?? 'Working'}</>
+              ) : 'Online'}
             </div>
           </div>
-          <p className="page-description hide-mobile">
+          <p className="page-description">
             Process, translate, and classify e-commerce order data with AI.
           </p>
         </header>
 
-        {/* API Configuration */}
-        <div className="responsive-grid mb-4 animate-slide-up delay-1">
+        {/* ── API Keys card (collapsible) ──────────────── */}
+        <div className="responsive-grid mb-4 animate-fade-up delay-1">
+
           <div className="card">
-            <div className="card-header">
-              <span className="card-title">
-                <Key size={14} />
-                API Keys
-              </span>
-            </div>
-            <div className="card-body">
-              <div className="form-group">
-                <label className="form-label">Google Translate</label>
-                <input
-                  type="password"
-                  placeholder="Enter API key"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
+            {/* Header row — always visible */}
+            <div
+              className="card-header"
+              onClick={() => setKeysExpanded(v => !v)}
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+            >
+              <span className="card-title"><Key size={13} />API Keys</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Status pill */}
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  color: keysConfigured ? 'var(--success)' : 'var(--text-muted)',
+                }}>
+                  {keysConfigured
+                    ? <><CheckCircle2 size={11} style={{ color: 'var(--success)' }} />Configured</>
+                    : <><span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} />Needs keys</>}
+                </span>
+                <ChevronDown size={14} style={{
+                  color: 'var(--text-muted)',
+                  transform: keysExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.25s ease',
+                }} />
               </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Gemini AI</label>
-                <input
-                  type="password"
-                  placeholder="Enter API key"
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                />
+            </div>
+
+            {/* Collapsible body */}
+            <div style={{
+              overflow: 'hidden',
+              maxHeight: keysExpanded ? 300 : 0,
+              transition: 'max-height 0.35s cubic-bezier(0.16,1,0.3,1)',
+            }}>
+              <div className="card-body">
+                <div className="form-group">
+                  <label className="form-label">Google Translate</label>
+                  <div className="input-wrapper">
+                    <input
+                      id="input-google-key"
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="AIza…"
+                      value={apiKey}
+                      onChange={e => setApiKey(e.target.value)}
+                      style={{ paddingRight: 72 }}
+                    />
+                    <span className={`input-status-dot ${apiKey ? 'active' : ''}`} style={{ right: 36 }} />
+                    <button className="input-toggle-btn" onClick={() => setShowApiKey(v => !v)} tabIndex={-1} aria-label="Toggle visibility">
+                      {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Gemini AI</label>
+                  <div className="input-wrapper">
+                    <input
+                      id="input-gemini-key"
+                      type={showGeminiKey ? 'text' : 'password'}
+                      placeholder="AIza…"
+                      value={geminiKey}
+                      onChange={e => setGeminiKey(e.target.value)}
+                      style={{ paddingRight: 72 }}
+                    />
+                    <span className={`input-status-dot ${geminiKey ? 'active' : ''}`} style={{ right: 36 }} />
+                    <button className="input-toggle-btn" onClick={() => setShowGeminiKey(v => !v)} tabIndex={-1} aria-label="Toggle visibility">
+                      {showGeminiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="card hide-mobile">
+          {/* Capabilities card */}
+          <div className="card">
             <div className="card-header">
-              <span className="card-title">
-                <Zap size={14} />
-                Capabilities
-              </span>
+              <span className="card-title"><Zap size={13} />Capabilities</span>
             </div>
             <div className="card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 {[
                   { icon: FileText, label: 'Data Parsing' },
                   { icon: Languages, label: 'Translation' },
                   { icon: Brain, label: 'Classification' },
                   { icon: Sparkles, label: 'Noise Filter' },
                 ].map(({ icon: Icon, label }) => (
-                  <div key={label} className="flex items-center gap-2" style={{ padding: '4px 0' }}>
-                    <div style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 6,
-                      background: 'rgba(var(--accent-rgb), 0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--accent)'
-                    }}>
-                      <Icon size={12} />
-                    </div>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{label}</span>
+                  <div key={label} className="capability-item">
+                    <div className="capability-icon"><Icon size={13} /></div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>{label}</span>
                   </div>
                 ))}
               </div>
@@ -328,29 +461,26 @@ function App() {
           </div>
         </div>
 
-        {/* Data Input */}
-        <div className="animate-slide-up delay-2">
+        {/* ── Data Input ──────────────────────────────── */}
+        <div className="animate-fade-up delay-2">
           <DataInput onProcess={handleProcess} isLoading={isProcessing} />
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="alert alert-error animate-fade">
-            <AlertCircle className="alert-icon" />
-            <div className="alert-content">
-              <h4>Error</h4>
-              <p>{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Processing Progress */}
+        {/* ── Processing progress (in-flow, full detail) ── */}
         {isProcessing && (
           <div className="progress-container animate-fade">
             <div className="progress-header">
-              <span className="progress-label">
-                {isSmartProcessing ? 'Smart Processing...' : (isTranslating ? 'Translating...' : (isClassifying ? 'Classifying...' : (isExtracting ? 'Extracting Attributes...' : 'Processing...')))}
-              </span>
+              <div className="progress-steps">
+                {STEPS.map((step, idx) => (
+                  <div
+                    key={step.key}
+                    className={`progress-step ${processingType === step.key ? 'active' : ''} ${curStepIdx > idx ? 'done' : ''}`}
+                  >
+                    <span className="progress-step-dot" />
+                    {step.label}
+                  </div>
+                ))}
+              </div>
               <span className="progress-value">{progress}%</span>
             </div>
             <div className="progress-bar">
@@ -359,113 +489,110 @@ function App() {
           </div>
         )}
 
-        {/* Results Section */}
+        {/* ── Empty state (no data yet) ────────────────── */}
+        {!data.length && !isProcessing && (
+          <div className="empty-state animate-fade-up delay-3">
+            <div className="empty-icon">
+              <FileText size={32} />
+            </div>
+            <h3>No data loaded</h3>
+            <p>Paste order data or upload an Excel / CSV file above, then click <strong>Process Data</strong>.</p>
+            <div className="empty-hints">
+              <span className="kbd">⌘V</span><span>paste</span>
+              <span style={{ opacity: 0.3 }}>·</span>
+              <span className="kbd">/</span><span>search</span>
+              <span style={{ opacity: 0.3 }}>·</span>
+              <span className="kbd">Esc</span><span>close drawer</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Results ─────────────────────────────────── */}
         {data.length > 0 && (
-          <div className="animate-slide-up delay-3">
+          <div className="animate-fade-up delay-3">
+
             {/* Metrics */}
             <div className="metrics-grid">
-              <div className="metric-card">
-                <div className="metric-label">Items</div>
-                <div className="metric-value accent">{data.length}</div>
-                <div className="metric-change positive">
-                  <ChevronRight size={12} />
-                  Ready
+              {[
+                {
+                  label: 'Items',
+                  value: <span className="accent">{data.length}</span>,
+                  sub: <span className="positive"><ChevronRight size={12} />Ready</span>,
+                },
+                {
+                  label: 'Orders',
+                  value: new Set(data.map(i => i.orderNumber)).size,
+                  sub: null,
+                },
+                {
+                  label: 'Value (CNY)',
+                  value: (() => {
+                    const total = data.reduce((s, i) => {
+                      const q = parseFloat(i.quantity.replace(/[^0-9.]/g, '') || '0');
+                      const p = parseFloat(i.amount.replace(/[^0-9.]/g, '') || '0');
+                      return s + q * p;
+                    }, 0);
+                    return (
+                      <>
+                        <div>¥{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                        <div style={{ color: 'var(--accent-color)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+                          ${(total * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
+                        </div>
+                      </>
+                    );
+                  })(),
+                  sub: null,
+                },
+              ].map((m, i) => (
+                <div key={i} className="metric-card" style={{ animationDelay: `${i * 60}ms` }}>
+                  <div className="metric-label">{m.label}</div>
+                  <div className="metric-value">{m.value}</div>
+                  {m.sub && <div className="metric-change">{m.sub}</div>}
                 </div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">Orders</div>
-                <div className="metric-value">
-                  {new Set(data.map(item => item.orderNumber)).size}
-                </div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">Total Value</div>
-                <div className="metric-value" style={{ fontSize: '1.2rem' }}>
-                  <div style={{ color: 'var(--text-primary)' }}>
-                    ¥{data.reduce((sum, item) => {
-                      const qty = parseFloat(item.quantity.replace(/[^0-9.]/g, '') || '0');
-                      const price = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
-                      return sum + (qty * price);
-                    }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </div>
-                  <div style={{ color: 'var(--accent)', fontSize: '0.9rem', marginTop: 4 }}>
-                    ${(data.reduce((sum, item) => {
-                      const qty = parseFloat(item.quantity.replace(/[^0-9.]/g, '') || '0');
-                      const price = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
-                      return sum + (qty * price);
-                    }, 0) * exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} USD
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Toolbar */}
+            {/* Action toolbar */}
             <div className="toolbar">
               <div className="toolbar-left">
                 <button
+                  id="btn-smart-process"
                   className="btn-primary"
                   onClick={handleSmartProcess}
                   disabled={isProcessing}
-                  style={{
-                    background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%)',
-                    boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.3)'
-                  }}
+                  title="Translate → Classify → Extract in one click"
                 >
-                  {isProcessing && !processingType ? (
-                    <>
-                      <span className="spinner" />
-                      <span className="hide-mobile">Processing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={16} />
-                      <span>Smart Process</span>
-                    </>
-                  )}
+                  {isProcessing && processingType
+                    ? <><span className="spinner" />Processing…</>
+                    : <><Sparkles size={15} />Smart Process</>}
                 </button>
-                <button
-                  className="btn-secondary"
-                  onClick={handleTranslate}
-                  disabled={isProcessing}
-                >
-                  {isTranslating ? (
-                    <>
-                      <span className="spinner" />
-                      <span className="hide-mobile">Translating</span>
-                    </>
-                  ) : (
-                    <>
-                      <Languages size={16} />
-                      <span>Translate</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={handleClassify}
-                  disabled={isProcessing}
-                >
-                  {isClassifying ? (
-                    <>
-                      <span className="spinner" />
-                      <span className="hide-mobile">Classifying</span>
-                    </>
-                  ) : (
-                    <>
-                      <Brain size={16} />
-                      <span>Classify</span>
-                    </>
-                  )}
-                </button>
+
+                <div className="action-cluster">
+                  <button id="btn-translate" className="btn-secondary btn-sm" onClick={handleTranslate} disabled={isProcessing} title="Translate only">
+                    {isTranslating ? <span className="spinner" /> : <Languages size={13} />}
+                    <span className="hide-mobile">Translate</span>
+                  </button>
+                  <button id="btn-classify" className="btn-secondary btn-sm" onClick={handleClassify} disabled={isProcessing} title="Classify only">
+                    {isClassifying ? <span className="spinner" /> : <Brain size={13} />}
+                    <span className="hide-mobile">Classify</span>
+                  </button>
+                </div>
+
                 <DownloadButton data={data} exchangeRate={exchangeRate} />
               </div>
+
               <div className="toolbar-right">
                 <button
-                  className="btn-danger btn-sm"
-                  onClick={() => setData([])}
+                  id="btn-clear"
+                  className="btn-ghost btn-sm"
+                  onClick={() => {
+                    setData([]);
+                    addToast('info', 'Cleared', 'Data removed from console.');
+                  }}
                   disabled={isProcessing}
+                  title="Clear all data"
                 >
-                  Clear
+                  <X size={13} />Clear
                 </button>
               </div>
             </div>
@@ -475,6 +602,9 @@ function App() {
           </div>
         )}
       </main>
+
+      {/* ══ Toast stack ══ */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

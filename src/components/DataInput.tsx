@@ -25,22 +25,16 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
         setIsDragOver(true);
     };
 
-    const handleDragLeave = () => {
-        setIsDragOver(false);
-    };
+    const handleDragLeave = () => setIsDragOver(false);
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragOver(false);
-
         if (inputMode === 'paste') {
             const droppedText = e.dataTransfer.getData('text');
-            if (droppedText) {
-                setText(droppedText);
-            }
+            if (droppedText) setText(droppedText);
         } else {
-            const droppedFiles = Array.from(e.dataTransfer.files);
-            processFiles(droppedFiles);
+            processFiles(Array.from(e.dataTransfer.files));
         }
     };
 
@@ -48,13 +42,10 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
         const excelFiles = fileList.filter(f =>
             f.name.endsWith('.xlsx') || f.name.endsWith('.xls') || f.name.endsWith('.csv')
         );
-
         for (const file of excelFiles) {
             try {
                 const data = await readExcelFile(file);
-                if (data) {
-                    setFiles(prev => [...prev, data]);
-                }
+                if (data) setFiles(prev => [...prev, data]);
             } catch (err) {
                 console.error(`Error reading ${file.name}:`, err);
             }
@@ -68,23 +59,12 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                 try {
                     const data = new Uint8Array(e.target?.result as ArrayBuffer);
                     const workbook = XLSX.read(data, { type: 'array' });
-
-                    // Get the first sheet
                     const sheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[sheetName];
-
-                    // Convert to TSV format
                     const tsv = XLSX.utils.sheet_to_csv(worksheet, { FS: '\t' });
                     const rows = tsv.split('\n').filter(row => row.trim());
-
-                    resolve({
-                        name: file.name,
-                        data: tsv,
-                        rowCount: rows.length - 1 // Exclude header
-                    });
-                } catch (err) {
-                    reject(err);
-                }
+                    resolve({ name: file.name, data: tsv, rowCount: rows.length - 1 });
+                } catch (err) { reject(err); }
             };
             reader.onerror = reject;
             reader.readAsArrayBuffer(file);
@@ -92,9 +72,7 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            processFiles(Array.from(e.target.files));
-        }
+        if (e.target.files) processFiles(Array.from(e.target.files));
     };
 
     const removeFile = (index: number) => {
@@ -102,60 +80,60 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
     };
 
     const injectSample = () => {
-        setText(`20241024-001\t2024-10-24 10:00\tShipped\tGlobal Mall\tWinter Coat\thttp://example.com\tNavy/XL\t1\t599.00\t599.00\t0.00\tFedEx\tFX123456
+        setText(
+            `20241024-001\t2024-10-24 10:00\tShipped\tGlobal Mall\tWinter Coat\thttp://example.com\tNavy/XL\t1\t599.00\t599.00\t0.00\tFedEx\tFX123456
 20241024-002\t2024-10-24 11:30\tPending\tTech Haven\tPro Headphones\thttp://example.com\tSilver\t1\t1299.00\t1299.00\t10.00\tDHL\t-
-20241024-003\t2024-10-24 14:15\tProcessing\t时尚精品店\t秋冬新款羊毛大衣\thttp://example.com\t灰色/M\t2\t899.00\t1798.00\t0.00\tSF Express\tSF789012`);
+20241024-003\t2024-10-24 14:15\tProcessing\t时尚精品店\t秋冬新款羊毛大衣\thttp://example.com\t灰色/M\t2\t899.00\t1798.00\t0.00\tSF Express\tSF789012`
+        );
     };
 
     const handleProcess = () => {
         if (inputMode === 'paste') {
             onProcess(text);
         } else {
-            // Combine all file data
-            const combinedData = files.map(f => f.data).join('\n');
-            onProcess(combinedData);
+            onProcess(files.map(f => f.data).join('\n'));
         }
     };
 
     const canProcess = inputMode === 'paste' ? text.trim() : files.length > 0;
-    const totalRows = files.reduce((sum, f) => sum + f.rowCount, 0);
+    const totalRows = files.reduce((s, f) => s + f.rowCount, 0);
 
     return (
         <div className="card mb-6">
             <div className="card-header">
                 <span className="card-title">
-                    <FileText size={14} />
+                    <FileText size={13} />
                     Data Input
                 </span>
                 <div className="flex gap-2">
                     <button
+                        id="btn-mode-paste"
                         className={`btn-sm ${inputMode === 'paste' ? 'btn-primary' : 'btn-ghost'}`}
                         onClick={() => setInputMode('paste')}
-                        style={{ padding: '6px 12px' }}
                     >
-                        <FileText size={14} />
+                        <FileText size={13} />
                         Paste
                     </button>
                     <button
+                        id="btn-mode-upload"
                         className={`btn-sm ${inputMode === 'upload' ? 'btn-primary' : 'btn-ghost'}`}
                         onClick={() => setInputMode('upload')}
-                        style={{ padding: '6px 12px' }}
                     >
-                        <FileSpreadsheet size={14} />
+                        <FileSpreadsheet size={13} />
                         Upload
                     </button>
                 </div>
             </div>
+
             <div className="card-body">
                 {inputMode === 'paste' ? (
                     <>
-                        {/* Paste mode */}
-                        <div className="flex justify-between items-center mb-3">
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                Paste your order data (CSV, TSV format)
+                        <div className="flex justify-between items-center" style={{ marginBottom: '0.625rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                Paste your order data (CSV, TSV format) or drop text here
                             </span>
-                            <button className="btn-ghost btn-sm" onClick={injectSample}>
-                                <Sparkles size={14} />
+                            <button id="btn-sample" className="btn-ghost btn-sm" onClick={injectSample}>
+                                <Sparkles size={13} />
                                 Load Sample
                             </button>
                         </div>
@@ -166,16 +144,17 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                             onDrop={handleDrop}
                         >
                             <textarea
+                                id="main-search"
                                 rows={8}
-                                placeholder="Paste your order data here (Order #, Date, Status, Shop, Product, URL, SKU, Qty, Price...)"
+                                placeholder="Paste your order data here (Order #, Date, Status, Shop, Product, URL, SKU, Qty, Price…)"
                                 value={text}
-                                onChange={(e) => setText(e.target.value)}
+                                onChange={e => setText(e.target.value)}
                                 style={{
-                                    borderColor: isDragOver ? 'var(--accent)' : undefined,
-                                    background: isDragOver ? 'rgba(var(--accent-rgb), 0.02)' : undefined,
+                                    borderColor: isDragOver ? 'var(--accent-color)' : undefined,
+                                    background: isDragOver ? 'rgba(163, 161, 153, 0.04)' : undefined,
+                                    transition: 'border-color 0.2s, background 0.2s',
                                 }}
                             />
-
                             {!text && (
                                 <div style={{
                                     position: 'absolute',
@@ -185,10 +164,11 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     pointerEvents: 'none',
-                                    opacity: 0.3,
+                                    opacity: 0.2,
+                                    gap: '0.5rem',
                                 }}>
-                                    <FileText size={40} style={{ marginBottom: 12 }} />
-                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    <FileText size={44} />
+                                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                                         Paste or drop text here
                                     </span>
                                 </div>
@@ -197,7 +177,6 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                     </>
                 ) : (
                     <>
-                        {/* Upload mode */}
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -206,38 +185,52 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                             onChange={handleFileSelect}
                             style={{ display: 'none' }}
                         />
-
                         <div
+                            id="drop-zone"
                             onClick={() => fileInputRef.current?.click()}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
                             style={{
-                                border: `2px dashed ${isDragOver ? 'var(--accent)' : 'var(--border-default)'}`,
+                                border: `2px dashed ${isDragOver ? 'var(--accent-color)' : 'var(--border-strong)'}`,
                                 borderRadius: 'var(--radius-lg)',
-                                padding: '40px 20px',
+                                padding: '2.5rem 1.5rem',
                                 textAlign: 'center',
                                 cursor: 'pointer',
                                 transition: 'all 0.2s',
-                                background: isDragOver ? 'rgba(var(--accent-rgb), 0.02)' : 'var(--bg-secondary)',
+                                background: isDragOver
+                                    ? 'rgba(163, 161, 153, 0.04)'
+                                    : 'transparent',
                             }}
                         >
-                            <Upload size={40} style={{ color: isDragOver ? 'var(--accent)' : 'var(--text-muted)', marginBottom: 12 }} />
-                            <div style={{ fontWeight: 500, marginBottom: 4 }}>
+                            <Upload
+                                size={40}
+                                style={{
+                                    color: isDragOver ? 'var(--accent-color)' : 'var(--text-muted)',
+                                    marginBottom: 12,
+                                    display: 'block',
+                                    margin: '0 auto 12px',
+                                    animation: isDragOver ? 'float 1.5s ease-in-out infinite' : undefined,
+                                }}
+                            />
+                            <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
                                 {isDragOver ? 'Drop files here' : 'Click to upload or drag & drop'}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                                 Excel files (.xlsx, .xls) or CSV
                             </div>
                         </div>
 
-                        {/* File list */}
                         {files.length > 0 && (
-                            <div style={{ marginTop: 16 }}>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    {files.length} file{files.length > 1 ? 's' : ''} • {totalRows} rows
+                            <div style={{ marginTop: '1rem' }}>
+                                <div style={{
+                                    fontSize: '0.65rem', color: 'var(--text-muted)',
+                                    marginBottom: '0.5rem', textTransform: 'uppercase',
+                                    letterSpacing: '0.1em', fontWeight: 700,
+                                }}>
+                                    {files.length} file{files.length > 1 ? 's' : ''} · {totalRows} rows
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {files.map((file, index) => (
                                         <div
                                             key={index}
@@ -245,30 +238,28 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
-                                                padding: '10px 14px',
-                                                background: 'var(--bg-tertiary)',
+                                                padding: '0.625rem 0.875rem',
+                                                background: 'var(--bg-color)',
                                                 borderRadius: 'var(--radius-md)',
-                                                border: '1px solid var(--border-subtle)',
+                                                border: '1px solid var(--border-color)',
                                             }}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <FileSpreadsheet size={18} style={{ color: 'var(--success)' }} />
                                                 <div>
-                                                    <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{file.name}</div>
-                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                                    <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                                                        {file.name}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
                                                         {file.rowCount} rows
                                                     </div>
                                                 </div>
                                             </div>
                                             <button
-                                                className="btn-ghost"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    removeFile(index);
-                                                }}
-                                                style={{ padding: 6 }}
+                                                className="btn-ghost btn-sm"
+                                                onClick={e => { e.stopPropagation(); removeFile(index); }}
                                             >
-                                                <X size={16} />
+                                                <X size={14} />
                                             </button>
                                         </div>
                                     ))}
@@ -278,36 +269,29 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                     </>
                 )}
 
-                <div className="flex gap-3" style={{ marginTop: 16 }}>
+                <div className="flex gap-3" style={{ marginTop: '1rem' }}>
                     <button
+                        id="btn-process-data"
                         className="btn-primary btn-lg"
                         onClick={handleProcess}
                         disabled={!canProcess || isLoading}
                         style={{ flex: 1 }}
                     >
                         {isLoading ? (
-                            <>
-                                <span className="spinner" />
-                                Processing...
-                            </>
+                            <><span className="spinner" />Processing…</>
                         ) : (
-                            <>
-                                <Sparkles size={18} />
-                                Process Data
-                            </>
+                            <><Sparkles size={16} />Process Data</>
                         )}
                     </button>
-
                     <button
+                        id="btn-clear-input"
                         className="btn-danger"
-                        onClick={() => {
-                            setText('');
-                            setFiles([]);
-                        }}
+                        onClick={() => { setText(''); setFiles([]); }}
                         disabled={isLoading || (!text && files.length === 0)}
-                        title="Clear"
+                        title="Clear input"
+                        style={{ padding: '0.75rem 1rem' }}
                     >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                     </button>
                 </div>
             </div>

@@ -1,4 +1,6 @@
 import type { OrderItem, ParseResult } from '../types';
+import { extractColorFromModel } from '../utils/colorUtils';
+import { extractSizeFromModel } from '../utils/sizeUtils';
 
 export const parseRawData = (rawData: string): ParseResult => {
     const lines = rawData.trim().split('\n');
@@ -64,9 +66,9 @@ export const parseRawData = (rawData: string): ParseResult => {
         const item: OrderItem = {
             id: `${lastOrderNumber}-${i}`,
             orderNumber: lastOrderNumber,
-            orderTime: lastOrderTime,  // Always use lastOrderTime (filled down)
-            status: lastStatus,         // Always use lastStatus (filled down)
-            shopName: lastShopName,     // Always use lastShopName (filled down)
+            orderTime: lastOrderTime,
+            status: lastStatus,
+            shopName: lastShopName,
             productName: colProductName,
             productLink: colLink,
             model: colModel,
@@ -74,10 +76,12 @@ export const parseRawData = (rawData: string): ParseResult => {
             amount: colAmount,
             actualPayment: colActualPayment,
             freight: colFreight,
-            // Use current row's logistics info (do NOT fill down)
             logisticsCompany: colLogisticsCompany.includes('物流单号') ? '' : colLogisticsCompany,
             logisticsNumber: colLogisticsNumber.includes('物流单号') ? '' : colLogisticsNumber,
-            estArrivalDate: estArrival
+            estArrivalDate: estArrival,
+            // Extract color & size directly from column 6 (model/SKU) — no AI needed
+            attrColor: extractColorFromModel(colModel) ?? undefined,
+            attrSize: extractSizeFromModel(colModel) ?? undefined,
         };
 
         // Check if item has 0 QTY and 0 Amount - skip if so

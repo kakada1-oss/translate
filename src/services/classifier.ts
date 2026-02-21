@@ -1,463 +1,303 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { OrderItem } from '../types';
 
-const buildClothingPrompt = (chunk: string[]): string => {
-    return `
-You are a specialized CLOTHING & FASHION classifier for a retail POS system.
-ALL items in this dataset are clothing/fashion products.
-
-TASK: For each "Product Name [Style: Model]" string, extract:
-
-1. **category** - Choose ONE:
-   - "Tops" (T-shirts, shirts, blouses, sweaters, hoodies, tank tops, crop tops, tunics)
-   - "Bottoms" (pants, jeans, shorts, skirts, leggings, trousers)
-   - "Dresses" (all dress types including jumpsuits, rompers)
-   - "Outerwear" (jackets, coats, blazers, vests, cardigans, windbreakers)
-   - "Activewear" (sportswear, gym wear, yoga wear, athletic clothing, tracksuits)
-   - "Underwear & Sleepwear" (bras, panties, boxers, pajamas, robes, nightgowns, lingerie)
-   - "Swimwear" (bikinis, one-pieces, swim trunks, beach cover-ups, rash guards)
-   - "Accessories" (scarves, belts, hats, gloves, socks, ties, bags, jewelry)
-   - "Footwear" (shoes, boots, sandals, sneakers, slippers, heels)
-
-2. **subcategory** - Be SPECIFIC (examples by category):
-   
-   Tops:
-   - T-Shirt, Polo Shirt, Button-Up Shirt, Flannel Shirt, Blouse, Tunic
-   - Sweater, Pullover, Hoodie, Sweatshirt, Cardigan (lightweight)
-   - Tank Top, Crop Top, Camisole, Halter Top, Off-Shoulder Top
-   - Henley, Long Sleeve Tee, Graphic Tee, Basic Tee
-   
-   Bottoms:
-   - Jeans (Skinny, Straight, Bootcut, Wide Leg, Mom, Boyfriend)
-   - Pants (Cargo, Dress, Chinos, Joggers, Track Pants)
-   - Shorts (Denim, Athletic, Cargo, Bermuda)
-   - Skirts (Mini, Midi, Maxi, A-Line, Pencil, Pleated)
-   - Leggings, Tights, Jeggings
-   
-   Dresses:
-   - Maxi Dress, Midi Dress, Mini Dress
-   - Shirt Dress, Wrap Dress, A-Line Dress, Bodycon Dress
-   - Slip Dress, T-Shirt Dress, Sweater Dress
-   - Jumpsuit, Romper
-   
-   Outerwear:
-   - Jacket (Bomber, Denim, Leather, Windbreaker, Varsity, Trucker)
-   - Coat (Puffer, Down, Trench, Peacoat, Overcoat, Parka)
-   - Blazer, Sport Coat
-   - Vest (Puffer, Denim, Suit)
-   - Cardigan (heavy-weight)
-   
-   Activewear:
-   - Sports Bra, Athletic Top, Performance Tee
-   - Athletic Shorts, Running Shorts, Gym Shorts
-   - Yoga Pants, Athletic Leggings, Track Pants
-   - Tracksuit, Jogging Set, Sweat Set
-   
-   Footwear:
-   - Sneakers, Running Shoes, Athletic Shoes
-   - Boots (Ankle, Knee-High, Combat, Chelsea)
-   - Sandals, Slides, Flip Flops
-   - Heels (Pumps, Stilettos, Wedges, Block Heels)
-   - Flats, Loafers, Oxfords, Slip-Ons
-   
-   Accessories:
-   - Bags (Backpack, Crossbody, Tote, Shoulder Bag, Clutch, Handbag)
-   - Hats (Baseball Cap, Beanie, Bucket Hat, Fedora, Sun Hat)
-   - Scarves, Bandana, Shawl
-   - Belt, Suspenders
-   - Socks, Stockings
-
-3. **shortenedName** - 2-5 words including:
-   - Gender (if clear from context)
-   - Key visual descriptor (color, pattern, or distinctive feature)
-   - Product type
-   
-   Good examples:
-   - "Women's Black Hoodie" not "Black Hoodie Women's Large Cotton"
-   - "Men's Blue Denim Jeans" not "Jeans Blue"
-   - "Floral Maxi Dress" not "Women's Long Floral Summer Beach Dress"
-   - "White Sneakers" not "Sneakers"
-
-4. **color** - Extract the PRIMARY color or pattern:
-   
-   Solid colors: Black, White, Gray, Navy, Blue, Red, Pink, Green, Yellow, Brown, Beige, Tan, Cream, Purple, Orange, Maroon, Burgundy, Khaki, Olive, Mint, Lavender
-   
-   Patterns: Striped, Floral, Plaid, Checkered, Leopard, Animal Print, Camouflage, Polka Dot, Tie Dye, Abstract, Graphic
-   
-   Special cases:
-   - "Multi-color" if 3+ colors with no dominant one
-   - "Color Block" if distinct color sections
-   - null if genuinely unclear
-
-5. **size** - Standardize to ONE format:
-   
-   Letter sizes: XS, S, M, L, XL, XXL, XXXL, 4XL, 5XL
-   
-   Numeric (US Women's): 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24
-   
-   Numeric (EU): 34, 36, 38, 40, 42, 44, 46, 48, 50, 52
-   
-   Kids: 2T, 3T, 4T, 5, 6, 7, 8, 10, 12, 14, 16
-   
-   Shoe sizes: "US 8", "EU 42", "UK 6" (keep region prefix)
-   
-   Special: "One Size", "Free Size", "Plus Size"
-   
-   IMPORTANT: Convert variations:
-   - "large" → "L"
-   - "extra large" → "XL"  
-   - "medium" → "M"
-   - "2xl" → "XXL"
-
-6. **material** - Primary fabric (if mentioned in name OR style):
-   
-   Natural: Cotton, Wool, Cashmere, Silk, Linen, Leather, Suede
-   
-   Synthetic: Polyester, Nylon, Spandex, Acrylic, Rayon, Lycra
-   
-   Blends: "Cotton Blend", "Poly-Cotton", "Cotton-Spandex"
-   
-   Other: Denim, Fleece, Velvet, Corduroy, Knit, Jersey, Canvas, Satin, Chiffon
-   
-   null if not mentioned
-
-7. **gender** - Target demographic:
-   - "Men's" - men's/male items
-   - "Women's" - women's/female items  
-   - "Boys" - boys items
-   - "Girls" - girls items
-   - "Unisex" - explicitly unisex or gender-neutral
-   - null - if genuinely unclear
-
-CLASSIFICATION RULES:
-
-1. **PARSE STYLE FIELD CAREFULLY**:
-   The [Style: ...] contains critical info. Extract ALL available attributes.
-   
-   Examples:
-   - "Hoodie [Style: Men Black XL]" → gender: "Men's", color: "Black", size: "XL"
-   - "Dress [Style: Women Floral Red Medium Summer]" → gender: "Women's", color: "Floral", size: "M"
-   - "Jeans [Style: Blue Denim 32 Slim Fit]" → color: "Blue", material: "Denim", size: "32"
-
-2. **INFER GENDER FROM CONTEXT**:
-   - Item type implies gender: "Bra", "Blouse" → Women's
-   - Item type implies gender: "Tie", "Boxer Briefs" → Men's
-   - Keywords: "Lady", "Ladies" → Women's
-   - Keywords: "Men", "Man", "Male" → Men's
-   - If both name and style lack gender clues → null
-
-3. **CATEGORY PRIORITY** (when item could fit multiple):
-   - If has hood/zip and casual → "Tops" (Hoodie/Sweatshirt)
-   - If heavy/structured → "Outerwear" (Coat/Jacket)
-   - If athletic/performance fabric → "Activewear"
-   - Cardigan: lightweight = "Tops", heavy = "Outerwear"
-
-4. **HANDLE AMBIGUOUS ITEMS**:
-   - "Mystery Bag" / "Random Style" → Classify as best guess based on any clues
-   - "Special Offer" / "Clearance" → Classify by actual product mentioned
-   - Generic names → Use style field to determine specifics
-
-5. **EXTRACT PATTERNS AS COLORS**:
-   - "Striped Shirt" → color: "Striped" (not null)
-   - "Leopard Print Dress" → color: "Leopard"
-   - "Tie Dye Tee" → color: "Tie Dye"
-
-6. **SUBCATEGORY SPECIFICITY**:
-   ALWAYS choose the most specific subcategory:
-   - ❌ "Shirt" → ✅ "Button-Up Shirt" or "T-Shirt" or "Polo Shirt"
-   - ❌ "Jacket" → ✅ "Bomber Jacket" or "Denim Jacket"
-   - ❌ "Pants" → ✅ "Jeans" or "Cargo Pants" or "Dress Pants"
-   - ❌ "Dress" → ✅ "Maxi Dress" or "Midi Dress" or "Wrap Dress"
-
-7. **SHORTENED NAME QUALITY**:
-   - Include gender if known: "Women's" or "Men's"
-   - Include ONE key descriptor: color OR pattern OR material
-   - Keep it SHORT but DESCRIPTIVE
-   - ❌ "Black Cotton Long Sleeve Casual Men's T-Shirt XL" 
-   - ✅ "Men's Black T-Shirt"
-
-OUTPUT FORMAT:
-Return ONLY valid JSON. Keys must EXACTLY match input strings.
-
-{
-  "Product Name [Style: Info]": {
-    "category": "Tops",
-    "subcategory": "Hoodie",
-    "shortenedName": "Men's Black Hoodie",
-    "color": "Black",
-    "size": "XL",
-    "material": "Fleece",
-    "gender": "Men's"
-  }
-}
-
-DO NOT include markdown code blocks (no \`\`\`json). Return raw JSON only.
-
-Items to classify:
-${JSON.stringify(chunk)}
-`;
+export type ClothingProduct = {
+    fit?: string;        // Slim, Relaxed, Oversized, Regular
+    style?: string;      // Vintage, Casual, Minimal, Street
+    item: string;        // Jeans, T-Shirt, Jacket, Shirt, Shorts
 };
 
-export const classifyItems = async (
-    items: OrderItem[],
-    apiKey: string,
-    onProgress: (progress: number) => void
-): Promise<OrderItem[]> => {
-    if (!apiKey || items.length === 0) return items;
+// ─── Prompt builders ──────────────────────────────────────────────────────────
 
-    const infoToItemsMap = new Map<string, number[]>();
+export function buildClothingPrompt(product: ClothingProduct): string {
+    return `
+Generate a clothing product name.
 
-    items.forEach((item, index) => {
-        const name = item.productNameTranslated || item.productName;
-        const style = item.modelTranslated || item.model || 'No Style';
-        if (!name) return;
+Rules:
+- Use ONLY 3–4 words.
+- Structure: Fit + Style + Item.
+- Keep it clean and brandable.
+- No extra keywords.
+- No gender, no price, no SEO stuffing.
+- No emojis.
 
-        const key = `${name} [Style: ${style}]`;
-        if (!infoToItemsMap.has(key)) {
-            infoToItemsMap.set(key, []);
-        }
-        infoToItemsMap.get(key)?.push(index);
-    });
+Product Info:
+- Fit: ${product.fit ?? ""}
+- Style: ${product.style ?? ""}
+- Item: ${product.item}
 
-    const uniqueKeys = Array.from(infoToItemsMap.keys());
-    console.log(`🤖 Classifying ${uniqueKeys.length} unique clothing items`);
+Return ONLY the product name.
+`;
+}
 
-    const newItems = [...items];
-    const chunkSize = 40;
-    const chunks = [];
 
-    for (let i = 0; i < uniqueKeys.length; i += chunkSize) {
-        chunks.push(uniqueKeys.slice(i, i + chunkSize));
+/**
+ * Internal batch-classification prompt used by classifyItems().
+ */
+function buildClothingClassifyPrompt(
+    chunk: Array<{ id: string; productName: string; model: string }>
+): string {
+    return `
+You are an expert e-commerce product classifier specialising in fashion and clothing.
+
+## Task
+Classify each product and return a JSON array. One object per product, same order as input.
+
+## Output contract (strict JSON — no markdown fences)
+[
+  {
+    "id": "<same id as input>",
+    "category": "<see categories below>",
+    "subcategory": "<see subcategories below>",
+    "productNameShortened": "<concise English name, max 6 words>"
+  }
+]
+
+## Field rules
+
+### category (required)
+Choose exactly one:
+- "Tops"          — shirts, blouses, tees, sweatshirts, hoodies, jackets, coats
+- "Bottoms"       — trousers, jeans, shorts, skirts, leggings
+- "Dresses"       — dresses, jumpsuits, rompers
+- "Footwear"      — shoes, boots, sandals, sneakers, slippers
+- "Accessories"   — bags, belts, hats, scarves, socks, jewellery, wallets
+- "Sportswear"    — athletic wear, gym wear, yoga wear
+- "Underwear"     — underwear, lingerie, bras, boxers
+- "Outerwear"     — heavy coats, parkas, puffer jackets, raincoats
+- "Other"         — anything that doesn't fit above
+
+### subcategory (required)
+A specific type within the category (e.g. "Hoodie", "Slim-fit Jeans", "Ankle Boots").
+Be concise and specific. Max 3 words.
+
+### productNameShortened (required)
+- Translate to English if needed
+- Remove noise: colour, size, brand, shop name, punctuation clutter
+- Keep: garment type + key style word(s)
+- Max 6 words
+- Title Case
+
+## Input
+${JSON.stringify(chunk, null, 2)}
+`.trim();
+}
+
+/**
+ * Build the attribute-extraction prompt used by extractAttributes().
+ */
+function buildAttributePrompt(
+    chunk: Array<{ id: string; productName: string; model: string; category: string }>
+): string {
+    return `
+You are an expert fashion product analyst.
+
+## Task
+Extract product attributes from each item and return a JSON array.
+One object per product, same order as input.
+
+## Output contract (strict JSON — no markdown fences)
+[
+  {
+    "id": "<same id as input>",
+    "attrSize": "<normalised size or null>",
+    "attrColor": "<English colour name or null>",
+    "attrMaterial": "<material or null>",
+    "attrGender": "<Men | Women | Unisex | Boys | Girls | null>",
+    "attrAgeGroup": "<Adult | Kids | Baby | null>",
+    "attrBrand": "<brand name or null>",
+    "attrOther": "<any other relevant attribute or null>"
+  }
+]
+
+## Field rules
+
+### attrSize
+- Normalise: S, M, L, XL, XXL, 3XL, 4XL, 5XL
+- Asian free sizes: "F", "Free", "Freesize", "One Size" → "Free"
+- Numeric sizes (shoe/waist): keep as-is (e.g. "42", "32W")
+- If absent: null
+
+### attrColor
+- Translate to English (e.g. "黑色" → "Black", "ネイビー" → "Navy")
+- Use common colour names: Black, White, Navy, Red, Blue, Green, Gray, Pink, Purple, Brown, Beige, Orange, Yellow, Khaki, Teal, Maroon, Burgundy, Cream, Ivory, Olive, etc.
+- For patterns: Striped, Floral, Plaid, Camouflage, Leopard, Polka Dot, Tie Dye, etc.
+- If multiple colours: "Multi-color"
+- If absent: null
+
+### attrMaterial
+- Common values: Cotton, Polyester, Linen, Wool, Silk, Denim, Leather, Fleece, Nylon, Spandex, Cashmere, Velvet, Chiffon, Rayon
+- Blends: "Cotton/Polyester" etc.
+- If absent: null
+
+### attrGender
+- "Men" | "Women" | "Unisex" | "Boys" | "Girls" | null
+
+### attrAgeGroup
+- "Adult" | "Kids" | "Baby" | null
+- Default to "Adult" unless product explicitly targets children
+
+### attrBrand
+- Only fill if a real brand name is clearly stated
+- null if no brand or unclear
+
+### attrOther
+- Any other relevant attribute (e.g. "Waterproof", "Reversible", "Vintage", "Oversized")
+- null if nothing notable
+
+## Rules
+- Prefer null over empty string ""
+- Do NOT invent information not present in the product name or model
+- All text output in English
+
+## Input
+${JSON.stringify(chunk, null, 2)}
+`.trim();
+}
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+const CHUNK_SIZE = 20;
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+        chunks.push(arr.slice(i, i + size));
     }
+    return chunks;
+}
 
-    let processedCount = 0;
+async function callGemini(apiKey: string, prompt: string): Promise<string> {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+}
+
+function parseJsonResponse<T>(raw: string): T[] {
+    // Strip markdown code fences if present
+    const cleaned = raw
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+    return JSON.parse(cleaned) as T[];
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Pass 1 — Classify products into categories and shorten names.
+ * Operates in chunks of 20, calling Gemini in parallel per chunk.
+ */
+export async function classifyItems(
+    items: OrderItem[],
+    geminiKey: string,
+    onProgress: (percent: number) => void
+): Promise<OrderItem[]> {
+    if (!items.length) return items;
+
+    const result = [...items];
+    const chunks = chunkArray(items, CHUNK_SIZE);
+    let processed = 0;
 
     for (const chunk of chunks) {
+        const input = chunk.map(item => ({
+            id: item.id,
+            productName: item.productNameTranslated || item.productName,
+            model: item.modelTranslated || item.model,
+        }));
+
         try {
-            const prompt = buildClothingPrompt(chunk);
+            const prompt = buildClothingClassifyPrompt(input);
+            const raw = await callGemini(geminiKey, prompt);
+            const parsed = parseJsonResponse<{
+                id: string;
+                category: string;
+                subcategory: string;
+                productNameShortened: string;
+            }>(raw);
 
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }]
-                    })
-                }
-            );
-
-            const result = await response.json();
-
-            if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                let text = result.candidates[0].content.parts[0].text.trim();
-                text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-                try {
-                    const classifications = JSON.parse(text);
-
-                    Object.entries(classifications).forEach(([descriptionKey, classification]: [string, any]) => {
-                        const indices = infoToItemsMap.get(descriptionKey);
-                        if (indices) {
-                            indices.forEach(idx => {
-                                newItems[idx].category = classification.category || 'Uncategorized';
-                                newItems[idx].subcategory = classification.subcategory || '';
-                                newItems[idx].productNameShortened = classification.shortenedName || '';
-                                newItems[idx].attrColor = classification.color || '';
-                                newItems[idx].attrSize = classification.size || '';
-                                newItems[idx].attrMaterial = classification.material || '';
-                                newItems[idx].attrGender = classification.gender || '';
-                            });
-                        }
-                    });
-                } catch (parseError) {
-                    console.error("Failed to parse Gemini JSON", parseError, text);
+            for (const classified of parsed) {
+                const idx = result.findIndex(r => r.id === classified.id);
+                if (idx !== -1) {
+                    result[idx] = {
+                        ...result[idx],
+                        category: classified.category,
+                        subcategory: classified.subcategory,
+                        productNameShortened: classified.productNameShortened,
+                    };
                 }
             }
-
         } catch (err) {
-            console.error("Gemini API Error", err);
+            console.error('[classifyItems] chunk failed:', err);
         }
 
-        processedCount += chunk.length;
-        onProgress(Math.min(100, Math.round((processedCount / uniqueKeys.length) * 100)));
+        processed += chunk.length;
+        onProgress(Math.round((processed / items.length) * 100));
     }
 
-    return newItems;
-};
-
-// ============================================================================
-// PASS 2: Attribute Extraction (Category-Specific)
-// ============================================================================
-
-const buildAttributePrompt = (category: string, items: { key: string; name: string; style: string }[]): string => {
-    // Category-specific attribute guidance
-    const categoryGuidance: Record<string, string> = {
-        'Clothing': `Focus on: size (XS/S/M/L/XL/XXL or numeric), color, material (cotton, polyester, wool, etc.), gender (Men/Women/Unisex), age group (Adult/Kids/Baby).`,
-        'Footwear': `Focus on: size (shoe size numbers), color, material (leather, canvas, synthetic), gender, age group.`,
-        'Kids': `Focus on: size (age-based like 2-3Y, 4-5Y or S/M/L), color, material, age group (Baby 0-2, Toddler 2-4, Kids 4-12, Teen 12+).`,
-        'Electronics': `Focus on: color, model/version, storage capacity, key specs. Size/gender/age usually N/A.`,
-        'Beauty': `Focus on: color/shade, size/volume (ml, oz), skin type if mentioned. Gender if specified.`,
-        'Home & Garden': `Focus on: size/dimensions, color, material (wood, metal, plastic, fabric).`,
-        'Pet Supplies': `Focus on: size (XS/S/M/L/XL for pet sizing), color, material, pet type (Dog/Cat/Bird/Fish).`,
-        'Jewelry': `Focus on: size (ring size, length), color/metal (gold, silver, rose gold), material.`,
-        'Bags': `Focus on: size (S/M/L or dimensions), color, material (leather, canvas, nylon).`,
-        'Sports': `Focus on: size, color, material, gender if applicable.`,
-        'Accessories': `Focus on: size if applicable, color, material.`,
-    };
-
-    const guidance = categoryGuidance[category] || `Extract: size, color, material, gender, age group where applicable.`;
-
-    const itemList = items.map(i => `"${i.key}"`).join(', ');
-
-    return `
-You are a product attribute extractor for a POS/inventory system.
-Category context: ${category}
-
-TASK: Extract structured attributes from each product description.
-
-${guidance}
-
-ATTRIBUTE RULES:
-1. "size" - Clothing: XS/S/M/L/XL/XXL/2XL/3XL or numeric. Kids: age-based (2-3Y, 4-5Y). Shoes: numeric. If multiple sizes, pick the one mentioned. If none, use "".
-2. "color" - Primary color only. If pattern (floral, striped), include it (e.g., "Blue Striped"). If none mentioned, use "".
-3. "material" - Primary material. If none mentioned, use "".
-4. "gender" - Men/Women/Unisex/Boys/Girls. If unclear, use "".
-5. "ageGroup" - Baby (0-2), Toddler (2-4), Kids (4-12), Teen (12-18), Adult. If unclear, use "".
-6. "brand" - If a brand name is clearly visible. Otherwise "".
-7. "other" - Any other notable attribute not covered above (e.g., "Waterproof", "USB-C", "Rechargeable").
-
-OUTPUT: Return ONLY valid JSON. Keys must EXACTLY match the input strings.
-
-Example Input for Clothing: ["Cotton T-Shirt [Style: Men's Navy Blue XL]"]
-Example Output:
-{
-  "Cotton T-Shirt [Style: Men's Navy Blue XL]": {
-    "size": "XL",
-    "color": "Navy Blue",
-    "material": "Cotton",
-    "gender": "Men",
-    "ageGroup": "Adult",
-    "brand": "",
-    "other": ""
-  }
+    return result;
 }
 
-DO NOT include markdown code blocks. Return only the JSON object.
-
-Items to extract attributes from:
-[${itemList}]
-`;
-};
-
-export const extractAttributes = async (
+/**
+ * Pass 2 — Extract detailed attributes (size, colour, material, gender, etc.).
+ * Runs after classifyItems so category context is available.
+ */
+export async function extractAttributes(
     items: OrderItem[],
-    apiKey: string,
-    onProgress: (progress: number) => void
-): Promise<OrderItem[]> => {
-    if (!apiKey || items.length === 0) return items;
+    geminiKey: string,
+    onProgress: (percent: number) => void
+): Promise<OrderItem[]> {
+    if (!items.length) return items;
 
-    // Group by category to use category-specific extraction
-    const categoryGroups = new Map<string, number[]>();
+    const result = [...items];
+    const chunks = chunkArray(items, CHUNK_SIZE);
+    let processed = 0;
 
-    items.forEach((item, index) => {
-        const category = item.category || 'Uncategorized';
-        // Skip Noise items
-        if (category === 'Noise') return;
+    for (const chunk of chunks) {
+        const input = chunk.map(item => ({
+            id: item.id,
+            productName: item.productNameTranslated || item.productName,
+            model: item.modelTranslated || item.model,
+            category: item.category || 'Other',
+        }));
 
-        if (!categoryGroups.has(category)) {
-            categoryGroups.set(category, []);
-        }
-        categoryGroups.get(category)?.push(index);
-    });
+        try {
+            const prompt = buildAttributePrompt(input);
+            const raw = await callGemini(geminiKey, prompt);
+            const parsed = parseJsonResponse<{
+                id: string;
+                attrSize: string | null;
+                attrColor: string | null;
+                attrMaterial: string | null;
+                attrGender: string | null;
+                attrAgeGroup: string | null;
+                attrBrand: string | null;
+                attrOther: string | null;
+            }>(raw);
 
-    const newItems = [...items];
-    const totalItems = Array.from(categoryGroups.values()).flat().length;
-    let processedCount = 0;
-
-    for (const [category, indices] of categoryGroups.entries()) {
-        // Build unique keys for this category
-        const keyToIndicesMap = new Map<string, number[]>();
-
-        indices.forEach(idx => {
-            const item = items[idx];
-            const name = item.productNameTranslated || item.productName;
-            const style = item.modelTranslated || item.model || 'No Style';
-            const key = `${name} [Style: ${style}]`;
-
-            if (!keyToIndicesMap.has(key)) {
-                keyToIndicesMap.set(key, []);
-            }
-            keyToIndicesMap.get(key)?.push(idx);
-        });
-
-        const uniqueKeys = Array.from(keyToIndicesMap.keys());
-
-        // Process in chunks
-        const chunkSize = 50;
-        for (let i = 0; i < uniqueKeys.length; i += chunkSize) {
-            const chunkKeys = uniqueKeys.slice(i, i + chunkSize);
-            const chunkItems = chunkKeys.map(key => {
-                const idx = keyToIndicesMap.get(key)![0];
-                return {
-                    key,
-                    name: items[idx].productNameTranslated || items[idx].productName,
-                    style: items[idx].modelTranslated || items[idx].model || ''
-                };
-            });
-
-            try {
-                const prompt = buildAttributePrompt(category, chunkItems);
-
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [{ text: prompt }]
-                        }]
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
-                    let text = result.candidates[0].content.parts[0].text.trim();
-                    // Strip markdown if present
-                    if (text.startsWith('```json')) text = text.replace('```json', '').replace('```', '');
-                    if (text.startsWith('```')) text = text.replace('```', '').replace('```', '');
-
-                    try {
-                        const extractions = JSON.parse(text);
-
-                        // Apply extractions to items
-                        Object.entries(extractions).forEach(([descKey, attrs]: [string, any]) => {
-                            const itemIndices = keyToIndicesMap.get(descKey);
-                            if (itemIndices) {
-                                itemIndices.forEach(idx => {
-                                    newItems[idx].attrSize = attrs.size || '';
-                                    newItems[idx].attrColor = attrs.color || '';
-                                    newItems[idx].attrMaterial = attrs.material || '';
-                                    newItems[idx].attrGender = attrs.gender || '';
-                                    newItems[idx].attrAgeGroup = attrs.ageGroup || '';
-                                    newItems[idx].attrBrand = attrs.brand || '';
-                                    newItems[idx].attrOther = attrs.other || '';
-                                });
-                            }
-                        });
-
-                    } catch (parseError) {
-                        console.error("Failed to parse attribute extraction JSON", parseError, text);
-                    }
+            for (const attrs of parsed) {
+                const idx = result.findIndex(r => r.id === attrs.id);
+                if (idx !== -1) {
+                    result[idx] = {
+                        ...result[idx],
+                        attrSize: attrs.attrSize ?? result[idx].attrSize,
+                        attrColor: attrs.attrColor ?? result[idx].attrColor,
+                        attrMaterial: attrs.attrMaterial ?? undefined,
+                        attrGender: attrs.attrGender ?? undefined,
+                        attrAgeGroup: attrs.attrAgeGroup ?? undefined,
+                        attrBrand: attrs.attrBrand ?? undefined,
+                        attrOther: attrs.attrOther ?? undefined,
+                    };
                 }
-
-            } catch (err) {
-                console.error("Gemini API Error (Attribute Extraction)", err);
             }
-
-            processedCount += chunkKeys.length;
-            onProgress(Math.min(100, Math.round((processedCount / totalItems) * 100)));
+        } catch (err) {
+            console.error('[extractAttributes] chunk failed:', err);
         }
+
+        processed += chunk.length;
+        onProgress(Math.round((processed / items.length) * 100));
     }
 
-    return newItems;
-};
+    return result;
+}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { OrderItem } from '../types';
+import { resolveColorSwatch } from '../utils/colorUtils';
 import { ExternalLink, Search, Copy, Check, X, Tag, Ruler, Shirt } from 'lucide-react';
 
 interface DataTableProps {
@@ -19,46 +20,38 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
         setTimeout(() => setCopiedId(null), 2000);
     };
 
-    // Filter data based on search
     const filteredData = data.filter(item => {
-        const query = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase();
         return (
-            item.orderNumber.toLowerCase().includes(query) ||
-            item.shopName.toLowerCase().includes(query) ||
-            (item.productNameTranslated || '').toLowerCase().includes(query) ||
-            (item.productNameShortened || '').toLowerCase().includes(query) ||
-            (item.modelTranslated || '').toLowerCase().includes(query) ||
-            (item.attrColor || '').toLowerCase().includes(query) ||
-            (item.attrSize || '').toLowerCase().includes(query) ||
-            item.category?.toLowerCase().includes(query) ||
-            item.subcategory?.toLowerCase().includes(query)
+            item.orderNumber.toLowerCase().includes(q) ||
+            item.shopName.toLowerCase().includes(q) ||
+            (item.productNameTranslated || '').toLowerCase().includes(q) ||
+            (item.productNameShortened || '').toLowerCase().includes(q) ||
+            (item.modelTranslated || '').toLowerCase().includes(q) ||
+            (item.attrColor || '').toLowerCase().includes(q) ||
+            (item.attrSize || '').toLowerCase().includes(q) ||
+            item.category?.toLowerCase().includes(q) ||
+            item.subcategory?.toLowerCase().includes(q)
         );
     });
 
-    // Calculate row spans for each order
     const getRowSpans = (items: OrderItem[]) => {
         const spans: Record<number, number> = {};
         let currentOrderNo = '';
         let startIndex = 0;
-
         items.forEach((item, index) => {
             if (item.orderNumber !== currentOrderNo) {
-                if (currentOrderNo !== '') {
-                    spans[startIndex] = index - startIndex;
-                }
+                if (currentOrderNo !== '') spans[startIndex] = index - startIndex;
                 currentOrderNo = item.orderNumber;
                 startIndex = index;
             }
-            if (index === items.length - 1) {
-                spans[startIndex] = index - startIndex + 1;
-            }
+            if (index === items.length - 1) spans[startIndex] = index - startIndex + 1;
         });
         return spans;
     };
 
     const rowSpans = getRowSpans(filteredData);
 
-    // Category color mapping
     const getCategoryColor = (category: string) => {
         const colors: Record<string, string> = {
             'Tops': '#3b82f6',
@@ -69,36 +62,42 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
             'Underwear & Sleepwear': '#f97316',
             'Swimwear': '#06b6d4',
             'Accessories': '#6366f1',
-            'Footwear': '#ef4444'
+            'Footwear': '#ef4444',
         };
-        return colors[category] || '#6b7280';
+        return colors[category] || '#9A9A97';
     };
 
     return (
-        <div className="animate-slide-up">
+        <div className="animate-fade-up">
             {/* Search toolbar */}
-            <div className="toolbar" style={{ marginBottom: 20 }}>
-                <div className="search-input-wrapper" style={{ width: 400 }}>
-                    <Search size={16} />
+            <div className="toolbar" style={{ marginBottom: '1.25rem' }}>
+                <div className="search-input-wrapper" style={{ maxWidth: 420, flex: 1 }}>
+                    <Search size={15} />
                     <input
+                        id="table-search"
                         type="text"
-                        placeholder="Search by order, product, color, size, category..."
+                        placeholder="Search orders, products, colors, categories… (press / to focus)"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={e => setSearchQuery(e.target.value)}
                     />
                     {searchQuery && (
                         <button
                             className="btn-ghost"
                             onClick={() => setSearchQuery('')}
-                            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', padding: 4 }}
+                            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', padding: 3 }}
+                            aria-label="Clear search"
                         >
-                            <X size={14} />
+                            <X size={13} />
                         </button>
                     )}
                 </div>
                 {searchQuery && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        Found <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{filteredData.length}</span> of {data.length} items
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        Found{' '}
+                        <span style={{ color: 'var(--accent-color)', fontWeight: 700, fontStyle: 'normal' }}>
+                            {filteredData.length}
+                        </span>{' '}
+                        of {data.length} items
                     </span>
                 )}
             </div>
@@ -108,17 +107,17 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th style={{ width: '140px' }}>Order</th>
-                            <th style={{ width: '120px' }}>Est. Arrival</th>
-                            <th style={{ width: '150px' }}>Merchant</th>
-                            <th style={{ width: '120px' }}>Category</th>
-                            <th style={{ minWidth: '200px' }}>Product</th>
-                            <th style={{ width: '80px' }}>Size</th>
-                            <th style={{ width: '100px' }}>Color</th>
-                            <th style={{ width: '100px' }}>Material</th>
-                            <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ width: '100px', textAlign: 'right' }}>Price</th>
-                            <th style={{ width: '110px', textAlign: 'right' }}>Total</th>
+                            <th style={{ width: 140 }}>Order</th>
+                            <th style={{ width: 120 }}>Est. Arrival</th>
+                            <th style={{ width: 150 }}>Merchant</th>
+                            <th style={{ width: 130 }}>Category</th>
+                            <th style={{ minWidth: 200 }}>Product</th>
+                            <th style={{ width: 80 }}>Size</th>
+                            <th style={{ width: 110 }}>Color</th>
+                            <th style={{ width: 110 }}>Material</th>
+                            <th style={{ width: 60, textAlign: 'center' }}>Qty</th>
+                            <th style={{ width: 100, textAlign: 'right' }}>Price</th>
+                            <th style={{ width: 110, textAlign: 'right' }}>Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -129,33 +128,33 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                             const price = parseFloat(item.amount.replace(/[^0-9.]/g, '') || '0');
                             const total = qty * price;
 
+                            const isShipped = item.status.includes('已发货') || item.statusTranslated?.includes('Shipped');
+                            const statusBg = isShipped ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)';
+                            const statusColor = isShipped ? 'var(--success)' : 'var(--warning)';
+
                             return (
-                                <tr
-                                    key={item.id}
-                                    style={{
-                                        transition: 'background 0.2s ease',
-                                    }}
-                                >
+                                <tr key={item.id}>
                                     {isFirstOfOrder && (
                                         <td rowSpan={span} style={{
                                             verticalAlign: 'top',
-                                            borderRight: '2px solid var(--border-subtle)',
-                                            background: 'rgba(var(--accent-rgb), 0.02)'
+                                            borderRight: '1px solid var(--border-color)',
+                                            background: 'rgba(163,161,153,0.02)',
                                         }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-mono" style={{
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: 600,
-                                                        color: 'var(--accent)',
-                                                        letterSpacing: '-0.02em'
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: 700,
+                                                        color: 'var(--accent-color)',
+                                                        letterSpacing: '-0.01em',
                                                     }}>
                                                         {item.orderNumber}
                                                     </span>
                                                     <button
-                                                        className="btn-ghost copy-btn"
+                                                        className="btn-ghost"
                                                         onClick={() => handleCopy(item.orderNumber, `order-${item.orderNumber}`)}
                                                         style={{ padding: 3 }}
+                                                        aria-label="Copy order number"
                                                     >
                                                         {copiedId === `order-${item.orderNumber}`
                                                             ? <Check size={10} style={{ color: 'var(--success)' }} />
@@ -163,25 +162,19 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                         }
                                                     </button>
                                                 </div>
-                                                <div style={{
-                                                    fontSize: '0.7rem',
-                                                    color: 'var(--text-muted)',
-                                                    lineHeight: 1.3
-                                                }}>
+                                                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>
                                                     {item.orderTime}
                                                 </div>
                                                 <div style={{
-                                                    fontSize: '0.65rem',
+                                                    fontSize: '0.62rem',
                                                     padding: '2px 6px',
-                                                    borderRadius: 3,
-                                                    background: item.status.includes('已发货') || item.statusTranslated?.includes('Shipped')
-                                                        ? 'rgba(16, 185, 129, 0.1)'
-                                                        : 'rgba(251, 191, 36, 0.1)',
-                                                    color: item.status.includes('已发货') || item.statusTranslated?.includes('Shipped')
-                                                        ? '#10b981'
-                                                        : '#f59e0b',
-                                                    fontWeight: 500,
-                                                    textAlign: 'center'
+                                                    borderRadius: 'var(--radius-xs)',
+                                                    background: statusBg,
+                                                    color: statusColor,
+                                                    fontWeight: 700,
+                                                    textAlign: 'center',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.04em',
                                                 }}>
                                                     {item.statusTranslated || item.status}
                                                 </div>
@@ -192,16 +185,10 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                     {isFirstOfOrder && (
                                         <td rowSpan={span} style={{
                                             verticalAlign: 'top',
-                                            borderRight: '2px solid var(--border-subtle)',
-                                            background: 'rgba(var(--accent-rgb), 0.01)',
-                                            textAlign: 'center'
+                                            borderRight: '1px solid var(--border-color)',
+                                            textAlign: 'center',
                                         }}>
-                                            <div style={{
-                                                fontSize: '0.8rem',
-                                                fontWeight: 500,
-                                                color: 'var(--text-primary)',
-                                                marginTop: 4
-                                            }}>
+                                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>
                                                 {item.estArrivalDate}
                                             </div>
                                             <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2 }}>
@@ -210,12 +197,8 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                         </td>
                                     )}
 
-                                    <td style={{ fontSize: '0.8rem' }}>
-                                        <div style={{
-                                            fontWeight: 500,
-                                            color: 'var(--text-primary)',
-                                            marginBottom: 2
-                                        }}>
+                                    <td style={{ fontSize: '0.82rem' }}>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                                             {item.shopName}
                                         </div>
                                     </td>
@@ -227,22 +210,19 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                 alignItems: 'center',
                                                 gap: 4,
                                                 padding: '3px 8px',
-                                                borderRadius: 4,
-                                                background: `${getCategoryColor(item.category || '')}15`,
+                                                borderRadius: 'var(--radius-sm)',
+                                                background: `${getCategoryColor(item.category || '')}14`,
                                                 color: getCategoryColor(item.category || ''),
-                                                fontSize: '0.7rem',
-                                                fontWeight: 600,
-                                                width: 'fit-content'
+                                                fontSize: '0.68rem',
+                                                fontWeight: 700,
+                                                width: 'fit-content',
+                                                letterSpacing: '0.04em',
                                             }}>
                                                 <Tag size={10} />
                                                 {item.category || 'N/A'}
                                             </span>
                                             {item.subcategory && (
-                                                <span style={{
-                                                    fontSize: '0.65rem',
-                                                    color: 'var(--text-muted)',
-                                                    fontStyle: 'italic'
-                                                }}>
+                                                <span style={{ fontSize: '0.63rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                                     {item.subcategory}
                                                 </span>
                                             )}
@@ -251,21 +231,16 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
 
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                            <div style={{
-                                                fontWeight: 600,
-                                                fontSize: '0.85rem',
-                                                color: 'var(--text-primary)',
-                                                lineHeight: 1.3
-                                            }}>
+                                            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
                                                 {item.productNameShortened || item.productNameTranslated || item.productName}
                                             </div>
                                             {item.modelTranslated && (
                                                 <div style={{
-                                                    fontSize: '0.7rem',
+                                                    fontSize: '0.68rem',
                                                     color: 'var(--text-muted)',
                                                     display: 'flex',
                                                     alignItems: 'center',
-                                                    gap: 4
+                                                    gap: 4,
                                                 }}>
                                                     <Shirt size={10} />
                                                     {item.modelTranslated}
@@ -277,15 +252,9 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                     target="_blank"
                                                     rel="noreferrer"
                                                     className="flex items-center gap-1"
-                                                    style={{
-                                                        fontSize: '0.65rem',
-                                                        color: 'var(--accent)',
-                                                        textDecoration: 'none',
-                                                        opacity: 0.7,
-                                                        transition: 'opacity 0.2s'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                                                    style={{ fontSize: '0.63rem', color: 'var(--accent-color)', opacity: 0.7 }}
+                                                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                                                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
                                                 >
                                                     <ExternalLink size={9} />
                                                     Source
@@ -300,13 +269,14 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
                                                 gap: 4,
-                                                padding: '4px 10px',
-                                                borderRadius: 4,
-                                                background: 'rgba(var(--accent-rgb), 0.08)',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 600,
-                                                color: 'var(--accent)',
-                                                border: '1px solid rgba(var(--accent-rgb), 0.2)'
+                                                padding: '3px 8px',
+                                                borderRadius: 'var(--radius-sm)',
+                                                background: 'rgba(163,161,153,0.08)',
+                                                fontSize: '0.72rem',
+                                                fontWeight: 700,
+                                                color: 'var(--accent-color)',
+                                                border: '1px solid rgba(163,161,153,0.2)',
+                                                letterSpacing: '0.04em',
                                             }}>
                                                 <Ruler size={11} />
                                                 {item.attrSize}
@@ -317,37 +287,27 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                     </td>
 
                                     <td>
-                                        {item.attrColor ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <div style={{
-                                                    width: 16,
-                                                    height: 16,
-                                                    borderRadius: 3,
-                                                    background: item.attrColor.toLowerCase().includes('black') ? '#000' :
-                                                        item.attrColor.toLowerCase().includes('white') ? '#fff' :
-                                                            item.attrColor.toLowerCase().includes('red') ? '#ef4444' :
-                                                                item.attrColor.toLowerCase().includes('blue') ? '#3b82f6' :
-                                                                    item.attrColor.toLowerCase().includes('green') ? '#10b981' :
-                                                                        item.attrColor.toLowerCase().includes('yellow') ? '#fbbf24' :
-                                                                            item.attrColor.toLowerCase().includes('pink') ? '#ec4899' :
-                                                                                item.attrColor.toLowerCase().includes('purple') ? '#a855f7' :
-                                                                                    item.attrColor.toLowerCase().includes('gray') || item.attrColor.toLowerCase().includes('grey') ? '#6b7280' :
-                                                                                        item.attrColor.toLowerCase().includes('brown') ? '#92400e' :
-                                                                                            item.attrColor.toLowerCase().includes('beige') ? '#d4a574' :
-                                                                                                item.attrColor.toLowerCase().includes('navy') ? '#1e3a8a' :
-                                                                                                    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                                    border: item.attrColor.toLowerCase().includes('white') ? '1px solid #e5e7eb' : 'none',
-                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                                }} />
-                                                <span style={{
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: 500,
-                                                    color: 'var(--text-secondary)'
-                                                }}>
-                                                    {item.attrColor}
-                                                </span>
-                                            </div>
-                                        ) : (
+                                        {item.attrColor ? (() => {
+                                            const swatch = resolveColorSwatch(item.attrColor);
+                                            return (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div style={{
+                                                        width: 16,
+                                                        height: 16,
+                                                        borderRadius: 'var(--radius-xs)',
+                                                        background: swatch.bg,
+                                                        border: swatch.border ?? (swatch.isLight
+                                                            ? '1px solid rgba(0,0,0,0.12)'
+                                                            : '1px solid rgba(255,255,255,0.08)'),
+                                                        boxShadow: 'var(--shadow-sm)',
+                                                        flexShrink: 0,
+                                                    }} />
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                                                        {item.attrColor}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })() : (
                                             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>—</span>
                                         )}
                                     </td>
@@ -360,10 +320,10 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                         <span style={{
                                             display: 'inline-block',
                                             padding: '2px 8px',
-                                            borderRadius: 3,
-                                            background: 'rgba(var(--accent-rgb), 0.05)',
-                                            fontSize: '0.8rem',
-                                            fontWeight: 600
+                                            borderRadius: 'var(--radius-xs)',
+                                            background: 'rgba(163,161,153,0.08)',
+                                            fontSize: '0.82rem',
+                                            fontWeight: 700,
                                         }}>
                                             {item.quantity}
                                         </span>
@@ -371,20 +331,19 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
 
                                     <td style={{ textAlign: 'right' }} className="font-mono">
                                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>¥{price.toFixed(2)}</div>
-                                        <div style={{ color: 'var(--accent)', fontSize: '0.7rem', fontWeight: 500 }}>
+                                        <div style={{ color: 'var(--accent-color)', fontSize: '0.7rem', fontWeight: 600 }}>
                                             ${(price * exchangeRate).toFixed(2)}
                                         </div>
                                     </td>
 
                                     <td style={{ textAlign: 'right' }} className="font-mono">
-                                        <div style={{ fontWeight: 600, color: 'var(--accent-light)', fontSize: '0.85rem' }}>
+                                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.875rem' }}>
                                             ¥{total.toFixed(2)}
                                         </div>
-                                        <div style={{ color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 600 }}>
+                                        <div style={{ color: 'var(--accent-color)', fontSize: '0.75rem', fontWeight: 700 }}>
                                             ${(total * exchangeRate).toFixed(2)}
                                         </div>
                                     </td>
-
                                 </tr>
                             );
                         })}
