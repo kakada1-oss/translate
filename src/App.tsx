@@ -463,7 +463,7 @@ function App() {
 
         {/* ── Data Input ──────────────────────────────── */}
         <div className="animate-fade-up delay-2">
-          <DataInput onProcess={handleProcess} isLoading={isProcessing} />
+          <DataInput onProcess={handleProcess} isLoading={isProcessing} addToast={addToast} />
         </div>
 
         {/* ── Processing progress (in-flow, full detail) ── */}
@@ -598,7 +598,7 @@ function App() {
             </div>
 
             {/* Data Table */}
-            <DataTable data={data} exchangeRate={exchangeRate} />
+            <DataTable data={data} exchangeRate={exchangeRate} addToast={addToast} />
           </div>
         )}
       </main>

@@ -6,17 +6,20 @@ import { ExternalLink, Search, Copy, Check, X, Tag, Ruler, Shirt } from 'lucide-
 interface DataTableProps {
     data: OrderItem[];
     exchangeRate: number;
+    addToast: (type: any, title: string, description?: string) => void;
 }
 
-const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
+const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate, addToast }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
     if (data.length === 0) return null;
 
-    const handleCopy = (text: string, id: string) => {
+    const handleCopy = (text: string, id: string, label: string) => {
+        if (!text) return;
         navigator.clipboard.writeText(text);
         setCopiedId(id);
+        addToast('success', 'Copied to clipboard', `${label}: ${text.length > 30 ? text.substring(0, 30) + '...' : text}`);
         setTimeout(() => setCopiedId(null), 2000);
     };
 
@@ -152,7 +155,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                     </span>
                                                     <button
                                                         className="btn-ghost"
-                                                        onClick={() => handleCopy(item.orderNumber, `order-${item.orderNumber}`)}
+                                                        onClick={() => handleCopy(item.orderNumber, `order-${item.orderNumber}`, 'Order #')}
                                                         style={{ padding: 3 }}
                                                         aria-label="Copy order number"
                                                     >
@@ -231,8 +234,18 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
 
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                                                {item.productNameShortened || item.productNameTranslated || item.productName}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                                                    {item.productNameShortened || item.productNameTranslated || item.productName}
+                                                </div>
+                                                <button
+                                                    className="btn-ghost"
+                                                    onClick={() => handleCopy(item.productNameShortened || item.productNameTranslated || item.productName, `prod-${item.id}`, 'Product')}
+                                                    style={{ padding: 2, opacity: 0.5 }}
+                                                    aria-label="Copy product name"
+                                                >
+                                                    {copiedId === `prod-${item.id}` ? <Check size={10} style={{ color: 'var(--success)' }} /> : <Copy size={10} />}
+                                                </button>
                                             </div>
                                             {item.modelTranslated && (
                                                 <div style={{
@@ -305,6 +318,14 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate }) => {
                                                     <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
                                                         {item.attrColor}
                                                     </span>
+                                                    <button
+                                                        className="btn-ghost"
+                                                        onClick={() => handleCopy(item.attrColor || '', `color-${item.id}`, 'Color')}
+                                                        style={{ padding: 2, opacity: 0.5 }}
+                                                        aria-label="Copy color"
+                                                    >
+                                                        {copiedId === `color-${item.id}` ? <Check size={10} style={{ color: 'var(--success)' }} /> : <Copy size={10} />}
+                                                    </button>
                                                 </div>
                                             );
                                         })() : (

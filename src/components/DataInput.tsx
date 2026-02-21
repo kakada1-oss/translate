@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 interface DataInputProps {
     onProcess: (data: string) => void;
     isLoading: boolean;
+    addToast: (type: any, title: string, description?: string) => void;
 }
 
 interface UploadedFile {
@@ -13,7 +14,7 @@ interface UploadedFile {
     rowCount: number;
 }
 
-const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
+const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading, addToast }) => {
     const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
     const [text, setText] = useState('');
     const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -79,12 +80,13 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
         setFiles(prev => prev.filter((_, i) => i !== index));
     };
 
-    const injectSample = () => {
-        setText(
-            `20241024-001\t2024-10-24 10:00\tShipped\tGlobal Mall\tWinter Coat\thttp://example.com\tNavy/XL\t1\t599.00\t599.00\t0.00\tFedEx\tFX123456
-20241024-002\t2024-10-24 11:30\tPending\tTech Haven\tPro Headphones\thttp://example.com\tSilver\t1\t1299.00\t1299.00\t10.00\tDHL\t-
-20241024-003\t2024-10-24 14:15\tProcessing\t时尚精品店\t秋冬新款羊毛大衣\thttp://example.com\t灰色/M\t2\t899.00\t1798.00\t0.00\tSF Express\tSF789012`
-        );
+    const loadSample = () => {
+        const sample = `Order No.\tTime\tShop\tProduct\tModel\tColor\tSize\tPrice\tQty\tStatus
+B240221-001\t2024-02-21 10:30\tFashionHub\tVintage Oversized Tee\tStandard\tMidnight Black\tXL\t¥159.00\t2\tPending
+B240221-002\t2024-02-21 11:15\tTrendSetter\tHigh-Waist Cargo Pants\tLoose Fit\tSage Green\tL\t¥299.00\t1\tPaid
+B240221-003\t2024-02-21 12:00\tSilkRoad\tFloral Summer Dress\tMaxi\tSoft Petal\tM\t¥450.00\t5\tShipped`;
+        setText(sample.trim());
+        addToast('info', 'Sample data loaded', 'Click "Process Data" to see AI in action.');
     };
 
     const handleProcess = () => {
@@ -132,7 +134,7 @@ const DataInput: React.FC<DataInputProps> = ({ onProcess, isLoading }) => {
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                 Paste your order data (CSV, TSV format) or drop text here
                             </span>
-                            <button id="btn-sample" className="btn-ghost btn-sm" onClick={injectSample}>
+                            <button id="btn-sample" className="btn-ghost btn-sm" onClick={loadSample}>
                                 <Sparkles size={13} />
                                 Load Sample
                             </button>
