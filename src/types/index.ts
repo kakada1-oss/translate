@@ -31,6 +31,7 @@ export interface OrderItem {
     attrBrand?: string;
     attrOther?: string;
     estArrivalDate?: string;
+    imgUrl?: string; // Product image URL from Taobao/Tmall
 }
 
 export type ParseResult = {

@@ -37,6 +37,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) =
                 'price_usd': (amountCNY * exchangeRate).toFixed(2),
                 'total_usd': (totalCNY * exchangeRate).toFixed(2),
                 'est_arrival_date': item.estArrivalDate || '-',
+                'img_url': item.imgUrl || '-',
                 'source_link': item.productLink,
             };
         });
@@ -49,7 +50,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ data, exchangeRate }) =
             { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 10 },
             { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 8 },
             { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-            { wch: 15 }, { wch: 40 },
+            { wch: 15 }, { wch: 50 }, { wch: 40 },
         ];
 
         const workbook = XLSX.utils.book_new();

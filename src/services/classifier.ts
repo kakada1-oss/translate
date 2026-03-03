@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { OrderItem } from '../types';
 
 export type ClothingProduct = {
@@ -167,11 +166,30 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
     return chunks;
 }
 
-async function callGemini(apiKey: string, prompt: string): Promise<string> {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+async function callOpenRouter(apiKey: string, prompt: string): Promise<string> {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'Threadline Translator'
+        },
+        body: JSON.stringify({
+            model: import.meta.env.VITE_OPENROUTER_MODEL || 'openrouter/auto',
+            messages: [
+                { role: 'user', content: prompt }
+            ]
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || '';
 }
 
 function parseJsonResponse<T>(raw: string): T[] {
@@ -187,11 +205,11 @@ function parseJsonResponse<T>(raw: string): T[] {
 
 /**
  * Pass 1 — Classify products into categories and shorten names.
- * Operates in chunks of 20, calling Gemini in parallel per chunk.
+ * Operates in chunks of 20, calling OpenRouter in parallel per chunk.
  */
 export async function classifyItems(
     items: OrderItem[],
-    geminiKey: string,
+    openRouterKey: string,
     onProgress: (percent: number) => void
 ): Promise<OrderItem[]> {
     if (!items.length) return items;
@@ -209,7 +227,7 @@ export async function classifyItems(
 
         try {
             const prompt = buildClothingClassifyPrompt(input);
-            const raw = await callGemini(geminiKey, prompt);
+            const raw = await callOpenRouter(openRouterKey, prompt);
             const parsed = parseJsonResponse<{
                 id: string;
                 category: string;
@@ -245,7 +263,7 @@ export async function classifyItems(
  */
 export async function extractAttributes(
     items: OrderItem[],
-    geminiKey: string,
+    openRouterKey: string,
     onProgress: (percent: number) => void
 ): Promise<OrderItem[]> {
     if (!items.length) return items;
@@ -264,7 +282,7 @@ export async function extractAttributes(
 
         try {
             const prompt = buildAttributePrompt(input);
-            const raw = await callGemini(geminiKey, prompt);
+            const raw = await callOpenRouter(openRouterKey, prompt);
             const parsed = parseJsonResponse<{
                 id: string;
                 attrSize: string | null;

@@ -115,6 +115,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate, addToast }) =
                             <th style={{ width: 150 }}>Merchant</th>
                             <th style={{ width: 130 }}>Category</th>
                             <th style={{ minWidth: 200 }}>Product</th>
+                            <th style={{ width: 60 }}>Image</th>
                             <th style={{ width: 80 }}>Size</th>
                             <th style={{ width: 110 }}>Color</th>
                             <th style={{ width: 110 }}>Material</th>
@@ -274,6 +275,30 @@ const DataTable: React.FC<DataTableProps> = ({ data, exchangeRate, addToast }) =
                                                 </a>
                                             )}
                                         </div>
+                                    </td>
+
+                                    <td style={{ textAlign: 'center' }}>
+                                        {item.imgUrl ? (
+                                            <a href={item.imgUrl} target="_blank" rel="noreferrer">
+                                                <img
+                                                    src={item.imgUrl}
+                                                    alt="Product"
+                                                    style={{
+                                                        width: 48,
+                                                        height: 48,
+                                                        objectFit: 'cover',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid var(--border-color)',
+                                                        cursor: 'pointer',
+                                                    }}
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).style.display = 'none';
+                                                    }}
+                                                />
+                                            </a>
+                                        ) : (
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>—</span>
+                                        )}
                                     </td>
 
                                     <td>
