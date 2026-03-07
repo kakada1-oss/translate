@@ -14,7 +14,7 @@ export const translateText = async (text: string, apiKey: string, targetLang: st
                 'Authorization': `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-                model: 'gpt-5-mini',
+                model: 'gpt-5.4',
                 messages: [
                     {
                         role: 'system',
@@ -75,7 +75,7 @@ export const translateBatch = async (
                         'Authorization': `Bearer ${apiKey}`,
                     },
                     body: JSON.stringify({
-                        model: 'gpt-5-mini',
+                        model: 'gpt-5.4',
                         messages: [
                             {
                                 role: 'system',

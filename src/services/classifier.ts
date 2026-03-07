@@ -178,7 +178,7 @@ async function callOpenAI(apiKey: string, prompt: string): Promise<string> {
             'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: 'gpt-5-mini',
+            model: 'gpt-5.4',
             messages: [
                 { role: 'system', content: 'You are a helpful assistant that returns only valid JSON.' },
                 { role: 'user', content: prompt }
