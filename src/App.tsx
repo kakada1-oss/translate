@@ -8,7 +8,6 @@ import { parseRawData } from './services/dataProcessor';
 import { translateBatch } from './services/translator';
 import { classifyItems, extractAttributes } from './services/classifier';
 import { getExchangeRate } from './services/currency';
-import { extractImagesForItems, testExtractorConnection } from './services/imageExtractor';
 import type { OrderItem } from './types';
 import {
   Languages,
@@ -51,12 +50,10 @@ let toastCounter = 0;
 function App() {
   /* ── Data state ────────────────────────────────── */
   const [data, setData] = useState<OrderItem[]>([]);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('tl_google_key') || import.meta.env.VITE_GOOGLE_API_KEY || '');
-  const [openRouterKey, setOpenRouterKey] = useState(() => import.meta.env.VITE_OPENROUTER_API_KEY || localStorage.getItem('tl_openrouter_key') || '');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
+  const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem('tl_openai_key') || import.meta.env.VITE_OPENAI_API_KEY || '');
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingType, setProcessingType] = useState<'translate' | 'classify' | 'extract' | 'images' | null>(null);
+  const [processingType, setProcessingType] = useState<'translate' | 'classify' | 'extract' | null>(null);
   const [progress, setProgress] = useState(0);
   const [activeNav, setActiveNav] = useState('console');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -65,8 +62,8 @@ function App() {
   /* ── UI state ──────────────────────────────────── */
   const [isDark, setIsDark] = useState(() => localStorage.getItem('tl_dark') === 'true');
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('tl_theme') as Theme) || 'default');
-  // Collapse API key card when keys already saved (including env vars)
-  const [keysExpanded, setKeysExpanded] = useState(() => !localStorage.getItem('tl_google_key') && !openRouterKey);
+  // Collapse API key card when key already saved
+  const [keysExpanded, setKeysExpanded] = useState(() => !localStorage.getItem('tl_openai_key'));
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   /* ── Sync → DOM / storage ──────────────────────── */
@@ -81,14 +78,7 @@ function App() {
   }, [theme]);
 
   useEffect(() => { getExchangeRate().then(setExchangeRate); }, []);
-  useEffect(() => { localStorage.setItem('tl_google_key', apiKey); }, [apiKey]);
-  useEffect(() => { localStorage.setItem('tl_openrouter_key', openRouterKey); }, [openRouterKey]);
-
-  // Expose test function to window for debugging
-  useEffect(() => {
-    (window as any).testExtractorConnection = testExtractorConnection;
-    console.log('Debug: Call testExtractorConnection() from console to test taobao-extractor');
-  }, []);
+  useEffect(() => { localStorage.setItem('tl_openai_key', openaiKey); }, [openaiKey]);
 
   // Close drawer on resize
   useEffect(() => {
@@ -138,71 +128,66 @@ function App() {
   };
 
   const handleTranslate = async () => {
-    if (!apiKey.trim()) { addToast('error', 'API key missing', 'Enter your Google Translate API key.'); return; }
+    if (!openaiKey.trim()) { addToast('error', 'API key missing', 'Enter your OpenAI API key.'); return; }
     if (!data.length) { addToast('info', 'No data', 'Load order data first.'); return; }
     setIsProcessing(true); setProcessingType('translate'); setProgress(0);
     try {
-      const result = await translateBatch(data, apiKey, p => setProgress(p));
+      const result = await translateBatch(data, openaiKey, p => setProgress(p));
       setData(result);
       addToast('success', 'Translation complete', `${result.length} items translated.`);
     } catch {
-      addToast('error', 'Translation failed', 'Check your Google Translate API key.');
+      addToast('error', 'Translation failed', 'Check your OpenAI API key.');
     } finally { setIsProcessing(false); setProcessingType(null); setProgress(0); }
   };
 
   const handleClassify = async () => {
-    if (!openRouterKey.trim()) { addToast('error', 'API key missing', 'Enter your OpenRouter API key.'); return; }
+    if (!openaiKey.trim()) { addToast('error', 'API key missing', 'Enter your OpenAI API key.'); return; }
     if (!data.length) { addToast('info', 'No data', 'Load order data first.'); return; }
     setIsProcessing(true); setProcessingType('classify'); setProgress(0);
     try {
-      const result = await classifyItems(data, openRouterKey, p => setProgress(p));
+      const result = await classifyItems(data, openaiKey, p => setProgress(p));
       setData(result);
       addToast('success', 'Classification complete', `${result.length} items classified.`);
     } catch {
-      addToast('error', 'Classification failed', 'Check your OpenRouter API key.');
+      addToast('error', 'Classification failed', 'Check your OpenAI API key.');
     } finally { setIsProcessing(false); setProcessingType(null); setProgress(0); }
   };
 
   const handleSmartProcess = async () => {
-    if (!apiKey.trim() || !openRouterKey.trim()) {
-      addToast('error', 'API keys missing', 'Enter both Google Translate and OpenRouter API keys.');
+    if (!openaiKey.trim()) {
+      addToast('error', 'API key missing', 'Enter your OpenAI API key.');
       return;
     }
     if (!data.length) { addToast('info', 'No data', 'Load order data first.'); return; }
     setIsProcessing(true);
     try {
       setProcessingType('translate'); setProgress(0);
-      const t = await translateBatch(data, apiKey, p => setProgress(p));
+      const t = await translateBatch(data, openaiKey, p => setProgress(p));
       setData(t);
 
       setProcessingType('classify'); setProgress(0);
-      const c = await classifyItems(t, openRouterKey, p => setProgress(p));
+      const c = await classifyItems(t, openaiKey, p => setProgress(p));
       setData(c);
 
       setProcessingType('extract'); setProgress(0);
-      const f = await extractAttributes(c, openRouterKey, p => setProgress(p));
+      const f = await extractAttributes(c, openaiKey, p => setProgress(p));
       setData(f);
 
-      setProcessingType('images'); setProgress(0);
-      const i = await extractImagesForItems(f, p => setProgress(p));
-      setData(i);
-
-      addToast('success', 'Smart processing done!', `${i.length} items translated, classified, enriched & images fetched.`, 6000);
+      addToast('success', 'Smart processing done!', `${f.length} items translated, classified & enriched.`, 6000);
     } catch {
-      addToast('error', 'Processing failed', 'Check your API keys and connection.');
+      addToast('error', 'Processing failed', 'Check your API key and connection.');
     } finally { setIsProcessing(false); setProcessingType(null); setProgress(0); }
   };
 
   const isTranslating = isProcessing && processingType === 'translate';
   const isClassifying = isProcessing && processingType === 'classify';
-  const keysConfigured = !!(apiKey && openRouterKey);
+  const keysConfigured = !!openaiKey;
 
   /* ── Progress step labels ──────────────────────── */
   const STEPS = [
     { key: 'translate', label: 'Translating' },
     { key: 'classify', label: 'Classifying' },
     { key: 'extract', label: 'Extracting' },
-    { key: 'images', label: 'Fetching Images' },
   ] as const;
   const curStepIdx = STEPS.findIndex(s => s.key === processingType);
 
@@ -412,37 +397,20 @@ function App() {
               transition: 'max-height 0.35s cubic-bezier(0.16,1,0.3,1)',
             }}>
               <div className="card-body">
-                <div className="form-group">
-                  <label className="form-label">Google Translate</label>
-                  <div className="input-wrapper">
-                    <input
-                      id="input-google-key"
-                      type={showApiKey ? 'text' : 'password'}
-                      placeholder="AIza…"
-                      value={apiKey}
-                      onChange={e => setApiKey(e.target.value)}
-                      style={{ paddingRight: 72 }}
-                    />
-                    <span className={`input-status-dot ${apiKey ? 'active' : ''}`} style={{ right: 36 }} />
-                    <button className="input-toggle-btn" onClick={() => setShowApiKey(v => !v)} tabIndex={-1} aria-label="Toggle visibility">
-                      {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">OpenRouter AI</label>
+                  <label className="form-label">OpenAI Project Key</label>
                   <div className="input-wrapper">
                     <input
-                      id="input-openrouter-key"
-                      type={showOpenRouterKey ? 'text' : 'password'}
-                      placeholder="sk-or-v1-…"
-                      value={openRouterKey}
-                      onChange={e => setOpenRouterKey(e.target.value)}
+                      id="input-openai-key"
+                      type={showOpenaiKey ? 'text' : 'password'}
+                      placeholder="sk-proj-…"
+                      value={openaiKey}
+                      onChange={e => setOpenaiKey(e.target.value)}
                       style={{ paddingRight: 72 }}
                     />
-                    <span className={`input-status-dot ${openRouterKey ? 'active' : ''}`} style={{ right: 36 }} />
-                    <button className="input-toggle-btn" onClick={() => setShowOpenRouterKey(v => !v)} tabIndex={-1} aria-label="Toggle visibility">
-                      {showOpenRouterKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    <span className={`input-status-dot ${openaiKey ? 'active' : ''}`} style={{ right: 36 }} />
+                    <button className="input-toggle-btn" onClick={() => setShowOpenaiKey(v => !v)} tabIndex={-1} aria-label="Toggle visibility">
+                      {showOpenaiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
                 </div>

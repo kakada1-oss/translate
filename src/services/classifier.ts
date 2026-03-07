@@ -40,17 +40,19 @@ function buildClothingClassifyPrompt(
 You are an expert e-commerce product classifier specialising in fashion and clothing.
 
 ## Task
-Classify each product and return a JSON array. One object per product, same order as input.
+Classify each product and return a JSON array under a "results" key. One object per product, same order as input.
 
 ## Output contract (strict JSON — no markdown fences)
-[
-  {
-    "id": "<same id as input>",
-    "category": "<see categories below>",
-    "subcategory": "<see subcategories below>",
-    "productNameShortened": "<concise English name, max 6 words>"
-  }
-]
+{
+  "results": [
+    {
+      "id": "<same id as input>",
+      "category": "<see categories below>",
+      "subcategory": "<see subcategories below>",
+      "productNameShortened": "<concise English name, max 6 words>"
+    }
+  ]
+}
 
 ## Field rules
 
@@ -92,22 +94,24 @@ function buildAttributePrompt(
 You are an expert fashion product analyst.
 
 ## Task
-Extract product attributes from each item and return a JSON array.
+Extract product attributes from each item and return a JSON array under an "attributes" key.
 One object per product, same order as input.
 
 ## Output contract (strict JSON — no markdown fences)
-[
-  {
-    "id": "<same id as input>",
-    "attrSize": "<normalised size or null>",
-    "attrColor": "<English colour name or null>",
-    "attrMaterial": "<material or null>",
-    "attrGender": "<Men | Women | Unisex | Boys | Girls | null>",
-    "attrAgeGroup": "<Adult | Kids | Baby | null>",
-    "attrBrand": "<brand name or null>",
-    "attrOther": "<any other relevant attribute or null>"
-  }
-]
+{
+  "attributes": [
+    {
+      "id": "<same id as input>",
+      "attrSize": "<normalised size or null>",
+      "attrColor": "<English colour name or null>",
+      "attrMaterial": "<material or null>",
+      "attrGender": "<Men | Women | Unisex | Boys | Girls | null>",
+      "attrAgeGroup": "<Adult | Kids | Baby | null>",
+      "attrBrand": "<brand name or null>",
+      "attrOther": "<any other relevant attribute or null>"
+    }
+  ]
+}
 
 ## Field rules
 
@@ -166,50 +170,49 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
     return chunks;
 }
 
-async function callOpenRouter(apiKey: string, prompt: string): Promise<string> {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+async function callOpenAI(apiKey: string, prompt: string): Promise<string> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': window.location.origin,
-            'X-Title': 'Threadline Translator'
+            'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: import.meta.env.VITE_OPENROUTER_MODEL || 'openrouter/auto',
+            model: 'gpt-5.4',
             messages: [
+                { role: 'system', content: 'You are a helpful assistant that returns only valid JSON.' },
                 { role: 'user', content: prompt }
-            ]
-        })
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0,
+        }),
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+    const result = await response.json();
+    if (result.error) {
+        throw new Error(result.error.message);
     }
-
-    const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+    return result.choices[0].message.content;
 }
 
-function parseJsonResponse<T>(raw: string): T[] {
+function parseJsonResponse<T>(raw: string): T {
     // Strip markdown code fences if present
     const cleaned = raw
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim();
-    return JSON.parse(cleaned) as T[];
+    return JSON.parse(cleaned) as T;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Pass 1 — Classify products into categories and shorten names.
- * Operates in chunks of 20, calling OpenRouter in parallel per chunk.
+ * Operates in chunks of 20, calling OpenAI in parallel per chunk.
  */
 export async function classifyItems(
     items: OrderItem[],
-    openRouterKey: string,
+    apiKey: string,
     onProgress: (percent: number) => void
 ): Promise<OrderItem[]> {
     if (!items.length) return items;
@@ -227,15 +230,17 @@ export async function classifyItems(
 
         try {
             const prompt = buildClothingClassifyPrompt(input);
-            const raw = await callOpenRouter(openRouterKey, prompt);
+            const raw = await callOpenAI(apiKey, prompt);
             const parsed = parseJsonResponse<{
-                id: string;
-                category: string;
-                subcategory: string;
-                productNameShortened: string;
+                results: Array<{
+                    id: string;
+                    category: string;
+                    subcategory: string;
+                    productNameShortened: string;
+                }>;
             }>(raw);
 
-            for (const classified of parsed) {
+            for (const classified of parsed.results) {
                 const idx = result.findIndex(r => r.id === classified.id);
                 if (idx !== -1) {
                     result[idx] = {
@@ -263,7 +268,7 @@ export async function classifyItems(
  */
 export async function extractAttributes(
     items: OrderItem[],
-    openRouterKey: string,
+    apiKey: string,
     onProgress: (percent: number) => void
 ): Promise<OrderItem[]> {
     if (!items.length) return items;
@@ -282,19 +287,21 @@ export async function extractAttributes(
 
         try {
             const prompt = buildAttributePrompt(input);
-            const raw = await callOpenRouter(openRouterKey, prompt);
+            const raw = await callOpenAI(apiKey, prompt);
             const parsed = parseJsonResponse<{
-                id: string;
-                attrSize: string | null;
-                attrColor: string | null;
-                attrMaterial: string | null;
-                attrGender: string | null;
-                attrAgeGroup: string | null;
-                attrBrand: string | null;
-                attrOther: string | null;
+                attributes: Array<{
+                    id: string;
+                    attrSize: string | null;
+                    attrColor: string | null;
+                    attrMaterial: string | null;
+                    attrGender: string | null;
+                    attrAgeGroup: string | null;
+                    attrBrand: string | null;
+                    attrOther: string | null;
+                }>;
             }>(raw);
 
-            for (const attrs of parsed) {
+            for (const attrs of parsed.attributes) {
                 const idx = result.findIndex(r => r.id === attrs.id);
                 if (idx !== -1) {
                     result[idx] = {

@@ -6,44 +6,45 @@ export const translateText = async (text: string, apiKey: string, targetLang: st
     if (!text) return '';
     if (!apiKey) return text + ' [No Key]';
 
-    const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
-
     try {
-        const response = await fetch(url, {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-                q: text,
-                target: targetLang,
-                format: 'text'
+                model: 'gpt-5.4',
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are a professional translator. Translate the given text into ${targetLang}. Return ONLY the translated text.`
+                    },
+                    { role: 'user', content: text }
+                ],
+                temperature: 0,
             }),
         });
 
         const result = await response.json();
         if (result.error) {
             console.error('Translation Error', result.error);
-            return text; // Fallback
+            return text;
         }
 
-        return result.data.translations[0].translatedText;
+        return result.choices[0].message.content.trim();
     } catch (err) {
         console.error(err);
         return text;
     }
 };
 
-// Batch translation helper could be optimized to send multiple strings in one 'q' array
 export const translateBatch = async (
     items: OrderItem[],
     apiKey: string,
     onProgress: (progress: number) => void
 ): Promise<OrderItem[]> => {
     const newItems = [...items];
-
-    // Identify unique strings to translate to save quota
-    // In a real app, we would cache these.
     const uniqueStrings = new Set<string>();
     items.forEach(item => {
         if (item.productName) uniqueStrings.add(item.productName);
@@ -53,38 +54,60 @@ export const translateBatch = async (
     });
 
     const stringMap: Record<string, string> = {};
-
-    // Chunk the unique strings for batch processing
     const uniqueArray = Array.from(uniqueStrings);
+    const CHUNK_SIZE = 20;
     const chunks = [];
-    for (let i = 0; i < uniqueArray.length; i += 50) { // 50 items per batch request
-        chunks.push(uniqueArray.slice(i, i + 50));
+    for (let i = 0; i < uniqueArray.length; i += CHUNK_SIZE) {
+        chunks.push(uniqueArray.slice(i, i + CHUNK_SIZE));
     }
 
     let processedCount = 0;
 
     for (const chunk of chunks) {
         if (!apiKey) {
-            // Mock translation if no key
             chunk.forEach(str => { stringMap[str] = `[MOCK] ${str}`; });
         } else {
-            // Real API Call
             try {
-                const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
-                const response = await fetch(url, {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                    },
                     body: JSON.stringify({
-                        q: chunk,
-                        target: 'en',
-                        format: 'text'
+                        model: 'gpt-5.4',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'Translate the following list of strings to English. Provide the results as a JSON array of strings in the exact same order.'
+                            },
+                            { role: 'user', content: JSON.stringify(chunk) }
+                        ],
+                        response_format: { type: 'json_object' },
+                        temperature: 0,
                     })
                 });
                 const res = await response.json();
-                if (res.data && res.data.translations) {
-                    res.data.translations.forEach((t: any, index: number) => {
-                        stringMap[chunk[index]] = t.translatedText;
-                    });
+                if (res.choices && res.choices[0]) {
+                    const content = res.choices[0].message.content;
+                    // Try to parse as JSON, handle both array and object wrapper
+                    try {
+                        let translated = JSON.parse(content);
+                        if (translated.translations) translated = translated.translations;
+                        if (Array.isArray(translated)) {
+                            translated.forEach((t: string, index: number) => {
+                                stringMap[chunk[index]] = t;
+                            });
+                        } else if (typeof translated === 'object' && !Array.isArray(translated)) {
+                            // Sometimes LLMs return { "1": "str1", ... } or similar if we aren't careful
+                            const vals = Object.values(translated) as string[];
+                            vals.forEach((t, index) => {
+                                if (chunk[index]) stringMap[chunk[index]] = t;
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse translation JSON', e);
+                    }
                 }
             } catch (e) {
                 console.error('Batch translate error', e);
@@ -94,7 +117,6 @@ export const translateBatch = async (
         onProgress(Math.min(100, Math.round((processedCount / uniqueArray.length) * 100)));
     }
 
-    // Map back to items
     return newItems.map(item => ({
         ...item,
         shopNameTranslated: item.shopName,
